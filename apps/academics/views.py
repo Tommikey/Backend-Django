@@ -106,7 +106,10 @@ class ProgressView(APIView):
         data = []
         for classroom in classrooms:
             completions = Completion.objects.filter(lesson__classroom=classroom)
-            submissions = Submission.objects.filter(assessment__classroom=classroom)
+            submissions = Submission.objects.filter(
+                assessment__classroom=classroom,
+                assessment__type=Assessment.Type.QUIZ,
+            )
             submissions = submissions.select_related("assessment")
             quizzes_total = Assessment.objects.filter(
                 classroom=classroom, type=Assessment.Type.QUIZ

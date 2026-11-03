@@ -88,3 +88,23 @@ def test_progress_counts(api, auth, setup):
     data = auth(student).get("/api/v1/academics/progress/").json()
     assert data["classrooms"][0]["lessons"] == {"total": 1, "completed": 1}
     assert data["classrooms"][0]["quizzes"]["submitted"] == 0
+
+
+def test_progress_quizzes_exclude_assignments(api, auth, setup):
+    from apps.assessments.models import Assessment, Submission
+
+    teacher, student, other, classroom, subject = setup
+    quiz = Assessment.objects.create(
+        title="Q", type="quiz", classroom=classroom, subject=subject, created_by=teacher,
+        max_points=2,
+    )
+    essay = Assessment.objects.create(
+        title="E", type="assignment", classroom=classroom, subject=subject, created_by=teacher
+    )
+    Submission.objects.create(assessment=quiz, student=student, score=2)
+    Submission.objects.create(assessment=essay, student=student, score=8)
+    data = auth(student).get("/api/v1/academics/progress/").json()
+    quizzes = data["classrooms"][0]["quizzes"]
+    assert quizzes["total"] == 1  # essay not counted as quiz
+    assert quizzes["submitted"] == 1
+    assert quizzes["avg_score_pct"] == 100.0  # 2/2 from the quiz only
