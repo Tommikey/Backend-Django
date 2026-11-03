@@ -1,0 +1,18 @@
+[tool.ruff]
+line-length = 100
+target-version = "py313"
+extend-exclude = ["config/wsgi.py", "config/asgi.py"]
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "B", "UP", "DJ", "S"]
+ignore = ["DJ001"]
+
+[tool.ruff.lint.per-file-ignores]
+"apps/*/migrations/*" = ["E501"]
+"apps/*/tests/*" = ["S101", "E501"]
+"conftest.py" = ["S105", "E501"]
+"apps/accounts/management/commands/seed.py" = ["S105"]
+
+[tool.pytest.ini_options]
+DJANGO_SETTINGS_MODULE = "config.settings"
+python_files = ["test_*.py"]
