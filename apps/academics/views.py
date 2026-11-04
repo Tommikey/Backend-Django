@@ -1,10 +1,14 @@
 from rest_framework import viewsets
 from rest_framework.decorators import action
-from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
-from apps.accounts.permissions import IsOwnerOrAdmin, IsStudent, IsTeacherOrAdmin
+from apps.accounts.access import (
+    OwnedObjectMixin,
+    RolePermissionsMixin,
+    StudentScopedQuerysetMixin,
+)
+from apps.accounts.permissions import IsStudent
 from apps.assessments.models import Assessment, Submission
 
 from .models import Classroom, Completion, Enrollment, Lesson, Subject
@@ -17,76 +21,36 @@ from .serializers import (
 )
 
 
-class SubjectViewSet(viewsets.ModelViewSet):
+class SubjectViewSet(RolePermissionsMixin, viewsets.ModelViewSet):
     serializer_class = SubjectSerializer
     queryset = Subject.objects.order_by("name")
 
-    def get_permissions(self):
-        if self.action in {"create", "update", "partial_update", "destroy"}:
-            return [IsTeacherOrAdmin()]
-        return [IsAuthenticated()]
 
-
-class ClassroomViewSet(viewsets.ModelViewSet):
+class ClassroomViewSet(
+    RolePermissionsMixin, OwnedObjectMixin, StudentScopedQuerysetMixin, viewsets.ModelViewSet
+):
     serializer_class = ClassroomSerializer
     queryset = Classroom.objects.select_related("created_by").order_by("name")
-
-    def get_permissions(self):
-        if self.action in {"update", "partial_update", "destroy"}:
-            return [IsTeacherOrAdmin(), IsOwnerOrAdmin()]
-        if self.action == "create":
-            return [IsTeacherOrAdmin()]
-        return [IsAuthenticated()]
-
-    def get_queryset(self):
-        qs = super().get_queryset()
-        if self.request.user.role == "student":
-            qs = qs.filter(enrollments__student=self.request.user).distinct()
-        return qs
-
-    def perform_create(self, serializer):
-        serializer.save(created_by=self.request.user)
+    owner_scoped = True
+    student_scope = "enrollments__student"
 
 
-class EnrollmentViewSet(viewsets.ModelViewSet):
+class EnrollmentViewSet(RolePermissionsMixin, StudentScopedQuerysetMixin, viewsets.ModelViewSet):
     serializer_class = EnrollmentSerializer
     queryset = Enrollment.objects.select_related("classroom", "student").order_by("-created_at")
-
-    def get_permissions(self):
-        if self.action in {"create", "update", "partial_update", "destroy"}:
-            return [IsTeacherOrAdmin()]
-        return [IsAuthenticated()]
-
-    def get_queryset(self):
-        qs = super().get_queryset()
-        if self.request.user.role == "student":
-            qs = qs.filter(student=self.request.user)
-        return qs
+    student_scope = "student"
 
 
-class LessonViewSet(viewsets.ModelViewSet):
+class LessonViewSet(
+    RolePermissionsMixin, OwnedObjectMixin, StudentScopedQuerysetMixin, viewsets.ModelViewSet
+):
     serializer_class = LessonSerializer
     queryset = (
         Lesson.objects.select_related("classroom", "subject", "created_by").order_by("-created_at")
     )
-
-    def get_permissions(self):
-        if self.action == "complete":
-            return [IsStudent()]
-        if self.action in {"update", "partial_update", "destroy"}:
-            return [IsTeacherOrAdmin(), IsOwnerOrAdmin()]
-        if self.action == "create":
-            return [IsTeacherOrAdmin()]
-        return [IsAuthenticated()]
-
-    def get_queryset(self):
-        qs = super().get_queryset()
-        if self.request.user.role == "student":
-            qs = qs.filter(classroom__enrollments__student=self.request.user).distinct()
-        return qs
-
-    def perform_create(self, serializer):
-        serializer.save(created_by=self.request.user)
+    action_permissions = {"complete": (IsStudent,)}
+    owner_scoped = True
+    student_scope = "classroom__enrollments__student"
 
     @action(detail=True, methods=["post"])
     def complete(self, request, pk=None):
