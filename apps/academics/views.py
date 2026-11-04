@@ -1,5 +1,7 @@
+from django.db.models import F
 from rest_framework import mixins, viewsets
 from rest_framework.decorators import action
+from rest_framework.exceptions import ValidationError
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
@@ -13,6 +15,7 @@ from apps.accounts.access import (
 from apps.accounts.permissions import IsAdmin, IsStudent
 from apps.assessments.models import Assessment, Submission
 
+from .aggregates import count_per, one_decimal, score_pct_per
 from .models import (
     AcademicSession,
     Classroom,
@@ -48,10 +51,20 @@ class EveryoneReadsMixin(AudienceScopedMixin):
         return qs
 
 
+def id_param(params, name):
+    """?name=<id> as an int, None if absent; anything else is a 400, not a database error."""
+    value = params.get(name)
+    if not value:
+        return None
+    if not value.isdigit():
+        raise ValidationError({name: "Must be an ID (a whole number)."})
+    return int(value)
+
+
 def filter_by_params(qs, params, *names):
     """Apply ?name=<id> filters that the client sent, e.g. ?classroom=3&session=1."""
     for name in names:
-        if value := params.get(name):
+        if (value := id_param(params, name)) is not None:
             qs = qs.filter(**{f"{name}_id": value})
     return qs
 
@@ -223,7 +236,7 @@ class ProgressView(APIView):
     def get(self, request):
         user = request.user
         school_id = user.school_id
-        session_id = request.query_params.get("session")
+        session_id = id_param(request.query_params, "session")
         session = (
             AcademicSession.objects.filter(school_id=school_id, pk=session_id).first()
             if session_id
@@ -243,41 +256,44 @@ class ProgressView(APIView):
             ) | classrooms.filter(form_teacher=user)
         elif user.role != "admin":
             classrooms = classrooms.none()
-        if classroom_id := request.query_params.get("classroom"):
+        if (classroom_id := id_param(request.query_params, "classroom")) is not None:
             classrooms = classrooms.filter(pk=classroom_id)
 
+        mine = {"student": user} if user.role == "student" else {}
+        in_session = {"term__session": session}
+        quizzes = Assessment.objects.filter(**in_session, type=Assessment.Type.QUIZ)
+        # quiz submissions in this session; a student sees just their own
+        quiz_work = Submission.objects.filter(
+            assessment__term__session=session, assessment__type=Assessment.Type.QUIZ, **mine
+        )
+        classrooms = classrooms.distinct().annotate(
+            n_students=count_per(Enrollment.objects.filter(session=session), "classroom"),
+            n_lessons=count_per(Lesson.objects.filter(**in_session), "classroom"),
+            # completions by students enrolled in the class that session
+            n_completed=count_per(
+                Completion.objects.filter(
+                    lesson__term__session=session,
+                    student__enrollments__session=session,
+                    student__enrollments__classroom=F("lesson__classroom"),
+                    **mine,
+                ),
+                "lesson__classroom",
+            ),
+            n_quizzes=count_per(quizzes, "classroom"),
+            n_submitted=count_per(quiz_work, "assessment__classroom"),
+            avg_pct=score_pct_per(quiz_work, "assessment__classroom"),
+        )
         data = [
-            self.classroom_progress(classroom, session, user) for classroom in classrooms.distinct()
+            {
+                "classroom": {"id": c.pk, "name": c.name},
+                "students": c.n_students,
+                "lessons": {"total": c.n_lessons, "completed": c.n_completed},
+                "quizzes": {
+                    "total": c.n_quizzes,
+                    "submitted": c.n_submitted,
+                    "avg_score_pct": one_decimal(c.avg_pct),
+                },
+            }
+            for c in classrooms
         ]
         return Response({"session": {"id": session.pk, "name": session.name}, "classrooms": data})
-
-    @staticmethod
-    def classroom_progress(classroom, session, user):
-        in_session = {"classroom": classroom, "term__session": session}
-        lessons = Lesson.objects.filter(**in_session)
-        completions = Completion.objects.filter(
-            lesson__in=lessons,
-            student__enrollments__classroom=classroom,
-            student__enrollments__session=session,
-        )
-        quizzes = Assessment.objects.filter(**in_session, type=Assessment.Type.QUIZ)
-        submissions = Submission.objects.filter(assessment__in=quizzes).select_related("assessment")
-        if user.role == "student":
-            completions = completions.filter(student=user)
-            submissions = submissions.filter(student=user)
-        scored = [s for s in submissions if s.score is not None and s.assessment.max_points]
-        avg = (
-            round(sum(s.score / s.assessment.max_points * 100 for s in scored) / len(scored), 1)
-            if scored
-            else None
-        )
-        return {
-            "classroom": {"id": classroom.pk, "name": classroom.name},
-            "students": classroom.enrollments.filter(session=session).count(),
-            "lessons": {"total": lessons.count(), "completed": completions.count()},
-            "quizzes": {
-                "total": quizzes.count(),
-                "submitted": submissions.count(),
-                "avg_score_pct": avg,
-            },
-        }
