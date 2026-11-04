@@ -294,3 +294,10 @@ def test_late_submissions_are_flagged(auth, kit):
     essay.save()
     r = auth(kit.student).post(f"{ASSESSMENTS_URL}{essay.pk}/submit/", {"text": "Sorry, late"})
     assert r.status_code == 201 and r.json()["is_late"] is True
+
+
+def test_search_stays_inside_what_you_may_see(auth, kit):
+    create_quiz(auth(kit.teacher), kit)  # "Algebra basics"
+    assert results(auth(kit.other_teacher).get(ASSESSMENTS_URL, {"search": "algebra"}).json()) == []
+    rows = results(auth(kit.teacher).get(ASSESSMENTS_URL, {"search": "algebra"}).json())
+    assert [a["title"] for a in rows] == ["Algebra basics"]

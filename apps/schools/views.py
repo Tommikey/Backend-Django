@@ -1,5 +1,6 @@
 from django.db import transaction
 from django.http import Http404
+from drf_spectacular.utils import extend_schema, extend_schema_view
 from rest_framework import generics, status, viewsets
 from rest_framework.permissions import AllowAny, IsAuthenticated
 from rest_framework.response import Response
@@ -11,6 +12,7 @@ from apps.accounts.permissions import IsAdmin
 from apps.accounts.serializers import UserSerializer
 from apps.results.models import Score
 
+from . import openapi
 from .models import AssessmentComponent, GradeBand, Level
 from .serializers import (
     AssessmentComponentSerializer,
@@ -32,6 +34,7 @@ class OnboardView(APIView):
     throttle_classes = [ScopedRateThrottle]
     throttle_scope = "onboard"
 
+    @extend_schema(request=OnboardSerializer, responses={201: openapi.OnboardResultSerializer})
     def post(self, request):
         serializer = OnboardSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
@@ -111,6 +114,10 @@ class ReplaceAllConfigView(APIView):
         """Hook: refuse the replacement (raise) when existing data depends on the old set."""
 
 
+@extend_schema_view(
+    get=extend_schema(responses=ComponentSetSerializer),
+    put=extend_schema(request=ComponentSetSerializer, responses=ComponentSetSerializer),
+)
 class ComponentsView(ReplaceAllConfigView):
     """How a subject's term score is split, e.g. CA1 20 + CA2 20 + Exam 60."""
 
@@ -130,6 +137,10 @@ class ComponentsView(ReplaceAllConfigView):
             )
 
 
+@extend_schema_view(
+    get=extend_schema(responses=GradeBandSetSerializer),
+    put=extend_schema(request=GradeBandSetSerializer, responses=GradeBandSetSerializer),
+)
 class GradeBandsView(ReplaceAllConfigView):
     """The grade scale, e.g. A1 from 75, B2 from 70..."""
 

@@ -9,6 +9,7 @@ attendance, so the marks behind them can't change until it's unpublished.
 """
 
 from django.db import transaction
+from drf_spectacular.utils import extend_schema
 from rest_framework.exceptions import NotFound, PermissionDenied, ValidationError
 from rest_framework.response import Response
 from rest_framework.views import APIView
@@ -19,6 +20,7 @@ from apps.results.access import can_read_published_card, can_review_class
 from apps.results.serializers import ClassTermSerializer, StudentTermSerializer
 from apps.results.services import class_students, enrollment_for, is_published, lock_term
 
+from . import openapi
 from .models import AttendanceRecord
 from .serializers import RegisterQuerySerializer, RegisterWriteSerializer
 from .services import class_attendance, register_dates
@@ -56,11 +58,13 @@ class RegisterView(APIView):
     out of ``marks`` keep whatever they had.
     """
 
+    @extend_schema(parameters=[RegisterQuerySerializer], responses=openapi.RegisterSerializer)
     def get(self, request):
         data = validated(RegisterQuerySerializer, request, request.query_params)
         check_can_take(request.user, data["classroom"])
         return Response(self.register(**data))
 
+    @extend_schema(request=RegisterWriteSerializer, responses=openapi.RegisterSerializer)
     @transaction.atomic
     def put(self, request):
         data = validated(RegisterWriteSerializer, request, request.data)
@@ -127,6 +131,7 @@ class ClassSummaryView(APIView):
     """GET ?classroom=&term=: every student's attendance counts for the term, plus the days
     the register was taken."""
 
+    @extend_schema(parameters=[ClassTermSerializer], responses=openapi.ClassSummarySerializer)
     def get(self, request):
         data = validated(ClassTermSerializer, request, request.query_params)
         classroom, term = data["classroom"], data["term"]
@@ -148,6 +153,9 @@ class StudentAttendanceView(APIView):
     marks for the term. For the student, their parents, the form teacher and admins.
     """
 
+    @extend_schema(
+        parameters=[StudentTermSerializer], responses=openapi.StudentAttendanceSerializer
+    )
     def get(self, request):
         user = request.user
         data = validated(StudentTermSerializer, request, request.query_params)

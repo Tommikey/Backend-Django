@@ -196,7 +196,7 @@ class SubmissionSerializer(serializers.ModelSerializer):
         ]
         read_only_fields = fields
 
-    def get_is_late(self, submission):
+    def get_is_late(self, submission) -> bool:
         due = submission.assessment.due_at
         return due is not None and submission.submitted_at > due
 

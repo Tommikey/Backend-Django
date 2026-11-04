@@ -1,3 +1,4 @@
+from drf_spectacular.utils import extend_schema
 from rest_framework import generics, viewsets
 from rest_framework.exceptions import ValidationError
 from rest_framework.response import Response
@@ -6,15 +7,16 @@ from rest_framework.views import APIView
 from rest_framework_simplejwt.tokens import RefreshToken
 from rest_framework_simplejwt.views import TokenBlacklistView, TokenObtainPairView
 
+from . import openapi
 from .access import InUse, RolePermissionsMixin, SchoolScopedMixin
 from .authentication import end_sessions
 from .models import Guardianship, User
 from .permissions import IsAdmin, IsTeacherOrAdmin
 from .serializers import (
     GuardianshipSerializer,
+    MeSerializer,
     PasswordChangeSerializer,
     SchoolUserSerializer,
-    UserSerializer,
 )
 from .throttles import LoginUsernameThrottle
 
@@ -38,6 +40,7 @@ class PasswordChangeView(APIView):
     throttle_classes = [ScopedRateThrottle]
     throttle_scope = "password"
 
+    @extend_schema(request=PasswordChangeSerializer, responses=openapi.TokenPairSerializer)
     def post(self, request):
         serializer = PasswordChangeSerializer(data=request.data, context={"request": request})
         serializer.is_valid(raise_exception=True)
@@ -50,7 +53,10 @@ class PasswordChangeView(APIView):
 
 
 class MeView(generics.RetrieveUpdateAPIView):
-    serializer_class = UserSerializer
+    """GET: your profile and what a client needs to start (see MeSerializer). PATCH: edit your
+    name and email."""
+
+    serializer_class = MeSerializer
 
     def get_object(self):
         return self.request.user
@@ -60,6 +66,8 @@ class UserViewSet(RolePermissionsMixin, SchoolScopedMixin, viewsets.ModelViewSet
     """The school's people. Admins manage them; teachers can look them up."""
 
     serializer_class = SchoolUserSerializer
+    search_fields = ["username", "first_name", "last_name", "email"]
+    ordering_fields = ["last_name", "first_name", "username", "role", "date_joined"]
     queryset = User.objects.order_by("role", "last_name", "first_name", "username")
     write_permissions = (IsAdmin,)
     action_permissions = {"list": (IsTeacherOrAdmin,), "retrieve": (IsTeacherOrAdmin,)}
@@ -104,6 +112,15 @@ class GuardianshipViewSet(RolePermissionsMixin, SchoolScopedMixin, viewsets.Mode
     """Parent-to-student links. Admins manage them; parents and students see their own."""
 
     serializer_class = GuardianshipSerializer
+    search_fields = [
+        "parent__first_name",
+        "parent__last_name",
+        "parent__username",
+        "student__first_name",
+        "student__last_name",
+        "student__username",
+    ]
+    ordering_fields = ["created_at", "student__last_name", "parent__last_name"]
     queryset = Guardianship.objects.select_related("parent", "student").order_by("-created_at")
     school_path = "student__school"
     write_permissions = (IsAdmin,)

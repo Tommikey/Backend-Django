@@ -1,4 +1,5 @@
 from django.db import transaction
+from drf_spectacular.utils import extend_schema
 from rest_framework.exceptions import NotFound, PermissionDenied
 from rest_framework.response import Response
 from rest_framework.views import APIView
@@ -7,7 +8,7 @@ from apps.accounts.access import InUse
 from apps.accounts.models import User
 from apps.accounts.permissions import IsAdmin
 
-from . import report_cards
+from . import openapi, report_cards
 from .access import (
     can_enter_scores,
     can_read_published_card,
@@ -56,12 +57,14 @@ class ScoreSheetView(APIView):
     and only until the term is published.
     """
 
+    @extend_schema(parameters=[ClassSubjectTermSerializer], responses=openapi.ScoreSheetSerializer)
     def get(self, request):
         data = validated(ClassSubjectTermSerializer, request, request.query_params)
         if not can_view_scores(request.user, data["classroom"], data["subject"], data["term"]):
             raise PermissionDenied("You don't teach this subject to this class.")
         return Response(self.sheet(request.user, **data))
 
+    @extend_schema(request=ScoreSheetWriteSerializer, responses=openapi.ScoreSheetSerializer)
     @transaction.atomic
     def put(self, request):
         data = validated(ScoreSheetWriteSerializer, request, request.data)
@@ -125,6 +128,7 @@ class CommentsView(APIView):
     Comments lock with the term's results.
     """
 
+    @extend_schema(request=CommentSerializer, responses=openapi.CommentsResultSerializer)
     @transaction.atomic
     def put(self, request):
         data = validated(CommentSerializer, request, request.data)
@@ -164,6 +168,7 @@ class PublishView(APIView):
 
     permission_classes = [IsAdmin]
 
+    @extend_schema(request=TermOnlySerializer, responses={201: openapi.PublishResultSerializer})
     @transaction.atomic
     def post(self, request):
         term = validated(TermOnlySerializer, request, request.data)["term"]
@@ -186,6 +191,7 @@ class UnpublishView(APIView):
 
     permission_classes = [IsAdmin]
 
+    @extend_schema(request=TermOnlySerializer, responses=openapi.UnpublishResultSerializer)
     @transaction.atomic
     def post(self, request):
         term = validated(TermOnlySerializer, request, request.data)["term"]
@@ -203,6 +209,7 @@ class ReportCardView(APIView):
     parents. Not yet published: a live draft, for admins and the form teacher only.
     """
 
+    @extend_schema(parameters=[StudentTermSerializer], responses=openapi.ReportCardSerializer)
     def get(self, request):
         user = request.user
         data = validated(StudentTermSerializer, request, request.query_params)
@@ -240,6 +247,7 @@ class ClassResultsView(APIView):
     from the stored report cards so it always agrees with them.
     """
 
+    @extend_schema(parameters=[ClassTermSerializer], responses=openapi.ClassResultsSerializer)
     def get(self, request):
         data = validated(ClassTermSerializer, request, request.query_params)
         classroom, term = data["classroom"], data["term"]

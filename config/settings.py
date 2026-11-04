@@ -39,6 +39,7 @@ INSTALLED_APPS = [
     "rest_framework_simplejwt",
     "rest_framework_simplejwt.token_blacklist",
     "corsheaders",
+    "drf_spectacular",
     # local
     "apps.schools",
     "apps.accounts",
@@ -47,6 +48,7 @@ INSTALLED_APPS = [
     "apps.live_classes",
     "apps.results",
     "apps.attendance",
+    "apps.dashboard",
 ]
 
 MIDDLEWARE = [
@@ -94,8 +96,13 @@ AUTH_PASSWORD_VALIDATORS = [
 REST_FRAMEWORK = {
     "DEFAULT_AUTHENTICATION_CLASSES": ("apps.accounts.authentication.JWTAuthentication",),
     "DEFAULT_PERMISSION_CLASSES": ("rest_framework.permissions.IsAuthenticated",),
-    "DEFAULT_PAGINATION_CLASS": "rest_framework.pagination.PageNumberPagination",
-    "PAGE_SIZE": 50,
+    "DEFAULT_SCHEMA_CLASS": "drf_spectacular.openapi.AutoSchema",
+    "DEFAULT_PAGINATION_CLASS": "apps.accounts.pagination.Pagination",
+    # ?search= and ?ordering= on lists; each viewset names its search_fields / ordering_fields
+    "DEFAULT_FILTER_BACKENDS": (
+        "rest_framework.filters.SearchFilter",
+        "rest_framework.filters.OrderingFilter",
+    ),
     "DEFAULT_THROTTLE_CLASSES": (
         "rest_framework.throttling.AnonRateThrottle",
         "rest_framework.throttling.UserRateThrottle",
@@ -125,6 +132,19 @@ SIMPLE_JWT = {
     "CHECK_REVOKE_TOKEN": True,
 }
 
+SPECTACULAR_SETTINGS = {
+    "TITLE": "YAP School Platform API",
+    "DESCRIPTION": (
+        "Multi-school API: school setup, the school year, lessons, assessments, live classes, "
+        "attendance and term results. Authenticate with `POST /api/v1/auth/token/` and send "
+        "`Authorization: Bearer <access>`."
+    ),
+    "VERSION": "1.0.0",
+    "SERVE_INCLUDE_SCHEMA": False,
+    "COMPONENT_SPLIT_REQUEST": True,  # separate request/response shapes (write-only fields)
+    "SCHEMA_PATH_PREFIX": r"/api/v1",
+}
+
 CORS_ALLOW_ALL_ORIGINS = env("CORS_ALLOW_ALL_ORIGINS")
 CORS_ALLOWED_ORIGINS = env("CORS_ALLOWED_ORIGINS")  # e.g. https://app.yap.school
 CSRF_TRUSTED_ORIGINS = env("CSRF_TRUSTED_ORIGINS")  # the Django admin's https origin
@@ -133,6 +153,7 @@ if not DEBUG:
     # deployed behind a TLS-terminating proxy that sets X-Forwarded-Proto
     SECURE_PROXY_SSL_HEADER = ("HTTP_X_FORWARDED_PROTO", "https")
     SECURE_SSL_REDIRECT = env("SECURE_SSL_REDIRECT")
+    SECURE_REDIRECT_EXEMPT = [r"^healthz/$"]  # load balancers probe over plain HTTP
     SECURE_HSTS_SECONDS = env("SECURE_HSTS_SECONDS")
     SECURE_HSTS_INCLUDE_SUBDOMAINS = True
     SESSION_COOKIE_SECURE = True
