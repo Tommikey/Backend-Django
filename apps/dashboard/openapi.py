@@ -2,7 +2,7 @@
 
 from rest_framework import serializers
 
-from apps.academics.openapi import RefSerializer, TermRefSerializer
+from apps.academics.openapi import RefSerializer, StudentRefSerializer, TermRefSerializer
 from apps.assessments.models import Assessment
 from apps.attendance.openapi import AttendanceSummarySerializer
 
@@ -44,7 +44,7 @@ class StudentBlockSerializer(serializers.Serializer):
 
 
 class ChildSerializer(serializers.Serializer):
-    student = RefSerializer()
+    student = StudentRefSerializer()
     classroom = RefSerializer(allow_null=True)
     due_count = serializers.IntegerField(help_text="Unsubmitted and not overdue")
     overdue_count = serializers.IntegerField()

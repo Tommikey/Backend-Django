@@ -2,7 +2,7 @@
 
 from rest_framework import serializers
 
-from apps.academics.openapi import RefSerializer, TermRefSerializer
+from apps.academics.openapi import RefSerializer, StudentRefSerializer, TermRefSerializer
 
 from .models import AttendanceRecord
 
@@ -17,7 +17,7 @@ class AttendanceSummarySerializer(serializers.Serializer):
 
 
 class RegisterRowSerializer(serializers.Serializer):
-    student = RefSerializer()
+    student = StudentRefSerializer()
     status = serializers.ChoiceField(choices=AttendanceRecord.Status.choices, allow_null=True)
     note = serializers.CharField()
 
@@ -32,7 +32,7 @@ class RegisterSerializer(serializers.Serializer):
 
 
 class SummaryRowSerializer(AttendanceSummarySerializer):
-    student = RefSerializer()
+    student = StudentRefSerializer()
 
 
 class ClassSummarySerializer(serializers.Serializer):
@@ -49,7 +49,7 @@ class MarkSerializer(serializers.Serializer):
 
 
 class StudentAttendanceSerializer(serializers.Serializer):
-    student = RefSerializer()
+    student = StudentRefSerializer()
     classroom = RefSerializer()
     term = TermRefSerializer()
     summary = AttendanceSummarySerializer()

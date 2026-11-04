@@ -6,9 +6,12 @@ from .models import ActivationCode, Guardianship, User
 
 @admin.register(User)
 class CustomUserAdmin(UserAdmin):
-    list_display = ["username", "email", "role", "school", "is_active"]
+    list_display = ["username", "email", "role", "school", "admission_number", "is_active"]
     list_filter = UserAdmin.list_filter + ("role", "school")
-    fieldsets = UserAdmin.fieldsets + (("School", {"fields": ("school", "role")}),)
+    search_fields = UserAdmin.search_fields + ("admission_number",)
+    fieldsets = UserAdmin.fieldsets + (
+        ("School", {"fields": ("school", "role", "admission_number")}),
+    )
     add_fieldsets = UserAdmin.add_fieldsets + (("School", {"fields": ("school", "role")}),)
 
 

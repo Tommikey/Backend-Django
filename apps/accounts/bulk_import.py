@@ -6,11 +6,13 @@ Columns (header names are case-insensitive; "First Name" works too):
     role          student | teacher | parent                          required
     first_name                                                         required
     last_name                                                          required
+    admission_number  students: the school's number, e.g. DSS/2025/014  optional
+                  (headers "Admission No", "Adm No", "Reg No" work too)
     username      blank: made from the name (ada.obi, ada.obi2, ...)
     email         optional
     classroom     students: their class this session, e.g. JSS1A    optional
-    children      parents: the children's usernames, or #<row> for a student row in this file,
-                  separated by ; (e.g. "ada.obi; #7")
+    children      parents: each child's admission number or username, or #<row> for a
+                  student row in this file, separated by ; (e.g. "DSS/2025/014; #7")
     relationship  parents: e.g. Mother                                 optional
 
 Validation runs over the whole file first and reports every problem by spreadsheet row
@@ -29,7 +31,7 @@ from django.core.exceptions import ValidationError as DjangoValidationError
 from django.core.validators import validate_email
 from django.db import IntegrityError, transaction
 from django.db.models import Q
-from django.db.models.functions import Lower
+from django.db.models.functions import Lower, Upper
 from rest_framework.exceptions import ValidationError
 
 from .access import InUse
@@ -40,6 +42,7 @@ COLUMNS = [
     "role",
     "first_name",
     "last_name",
+    "admission_number",
     "username",
     "email",
     "classroom",
@@ -47,6 +50,18 @@ COLUMNS = [
     "relationship",
 ]
 REQUIRED_COLUMNS = {"role", "first_name", "last_name"}
+# other names schools give a column, after lower-casing and _ for spaces
+ALIASES = {
+    "admission_no": "admission_number",
+    "admission": "admission_number",
+    "adm_no": "admission_number",
+    "reg_no": "admission_number",
+    "registration_number": "admission_number",
+    "firstname": "first_name",
+    "surname": "last_name",
+    "lastname": "last_name",
+    "class": "classroom",
+}
 ROLES = {User.Role.STUDENT, User.Role.TEACHER, User.Role.PARENT}
 MAX_ROWS = 2000
 MAX_BYTES = 2 * 1024 * 1024
@@ -54,10 +69,10 @@ MAX_BYTES = 2 * 1024 * 1024
 TEMPLATE = (
     ",".join(COLUMNS)
     + "\n"
-    + "student,Ada,Obi,,,JSS1A,,\n"
-    + "student,Tunde,Bello,tunde.b,,JSS1A,,\n"
-    + "parent,Ngozi,Obi,,ngozi@example.com,,#2;tunde.b,Mother\n"
-    + "teacher,Musa,Ibrahim,,musa@example.com,,,\n"
+    + "student,Ada,Obi,DSS/2025/001,,,JSS1A,,\n"
+    + "student,Tunde,Bello,DSS/2025/002,tunde.b,,JSS1A,,\n"
+    + "parent,Ngozi,Obi,,,ngozi@example.com,,DSS/2025/001;#3,Mother\n"
+    + "teacher,Musa,Ibrahim,,,musa@example.com,,,\n"
 )
 
 
@@ -67,6 +82,7 @@ class Row:
     role: str
     first_name: str
     last_name: str
+    admission_number: str
     username: str
     email: str
     classroom_name: str
@@ -83,7 +99,8 @@ class Row:
 
 
 def _header(name):
-    return re.sub(r"[\s\-]+", "_", (name or "").strip().lower())
+    key = re.sub(r"[\s\-.]+", "_", (name or "").strip().lower()).strip("_")
+    return ALIASES.get(key, key)
 
 
 def parse(upload):
@@ -118,6 +135,7 @@ def parse(upload):
                 role=cells.get("role", "").lower(),
                 first_name=cells.get("first_name", ""),
                 last_name=cells.get("last_name", ""),
+                admission_number=cells.get("admission_number", ""),
                 username=cells.get("username", ""),
                 email=cells.get("email", ""),
                 classroom_name=cells.get("classroom", ""),
@@ -156,6 +174,10 @@ def _check_fields(row):
             row.errors.append("username may only contain letters, digits and @ . + - _")
         if len(row.username) > 150:
             row.errors.append("username is too long.")
+    if row.admission_number and row.role != User.Role.STUDENT:
+        row.errors.append("Only students have an admission number.")
+    if len(row.admission_number) > 30:
+        row.errors.append("admission_number is too long.")
     if row.classroom_name and row.role != User.Role.STUDENT:
         row.errors.append("Only students have a classroom.")
     if (row.children_refs or row.relationship) and row.role != User.Role.PARENT:
@@ -224,21 +246,58 @@ def _resolve_classrooms(rows, school, session):
             row.errors.append(f"No class called {row.classroom_name!r}.")
 
 
+def _check_admission_numbers(rows, school):
+    """Unique in the file and in the school, ignoring case."""
+    seen = {}
+    for row in rows:
+        key = row.admission_number.upper()
+        if not key:
+            continue
+        if key in seen:
+            row.errors.append(
+                f"admission number {row.admission_number!r} is also on row {seen[key].number}."
+            )
+        else:
+            seen[key] = row
+    taken = (
+        User.objects.filter(school=school)
+        .annotate(a=Upper("admission_number"))
+        .filter(a__in=list(seen))
+        .values_list("a", flat=True)
+    )
+    for key in taken:
+        seen[key].errors.append(
+            f"admission number {seen[key].admission_number!r} already belongs to a student."
+        )
+
+
 def _resolve_children(rows, school):
+    """A child reference is #<row>, or an admission number or username of a student in this
+    file or already in the school. A reference that fits two different students is an error,
+    never a guess."""
     by_number = {r.number: r for r in rows}
-    in_file = {r.username.lower(): r for r in rows if r.role == User.Role.STUDENT}
-    named = {
-        ref.lower()
-        for r in rows
-        for ref in r.children_refs
-        if not ref.startswith("#") and ref.lower() not in in_file
-    }
-    existing = {
-        u.username.lower(): u
-        for u in User.objects.filter(school=school, role=User.Role.STUDENT)
-        .annotate(u=Lower("username"))
-        .filter(u__in=list(named))
-    }
+    students = [r for r in rows if r.role == User.Role.STUDENT]
+    file_by_username = {r.username.lower(): r for r in students}
+    file_by_admission = {r.admission_number.upper(): r for r in students if r.admission_number}
+    refs = {ref for r in rows for ref in r.children_refs if not ref.startswith("#")}
+    existing = list(
+        User.objects.filter(school=school, role=User.Role.STUDENT)
+        .annotate(u=Lower("username"), a=Upper("admission_number"))
+        .filter(Q(u__in=[x.lower() for x in refs]) | Q(a__in=[x.upper() for x in refs]))
+    )
+    school_by_username = {u.username.lower(): u for u in existing}
+    school_by_admission = {u.admission_number.upper(): u for u in existing if u.admission_number}
+
+    def lookup(ref):
+        found = [
+            file_by_admission.get(ref.upper()),
+            school_by_admission.get(ref.upper()),
+            file_by_username.get(ref.lower()),
+            school_by_username.get(ref.lower()),
+        ]
+        distinct = {id(t): t for t in found if t is not None}
+        return list(distinct.values())
+
     for row in rows:
         seen = set()
         for ref in row.children_refs:
@@ -248,13 +307,19 @@ def _resolve_children(rows, school):
                     row.errors.append(f"{ref} isn't a student row in this file.")
                     continue
             else:
-                target = in_file.get(ref.lower()) or existing.get(ref.lower())
-                if target is None:
+                matches = lookup(ref)
+                if not matches:
                     row.errors.append(f"No student {ref!r} in this file or your school.")
                     continue
-            key = id(target)
-            if key not in seen:
-                seen.add(key)
+                if len(matches) > 1:
+                    row.errors.append(
+                        f"{ref!r} is one student's admission number and another's username; "
+                        "use #<row> or the other identifier."
+                    )
+                    continue
+                target = matches[0]
+            if id(target) not in seen:
+                seen.add(id(target))
                 row.children.append(target)
 
 
@@ -262,6 +327,7 @@ def validate(rows, school, session):
     for row in rows:
         _check_fields(row)
     _assign_usernames(rows)
+    _check_admission_numbers(rows, school)
     _resolve_classrooms(rows, school, session)
     _resolve_children(rows, school)
     for row in rows:  # a parent linked to a broken student row can't be imported either
@@ -285,6 +351,7 @@ def commit(rows, school, session, admin):
             username=row.username,
             first_name=row.first_name,
             last_name=row.last_name,
+            admission_number=row.admission_number,
             email=row.email,
             role=row.role,
             school=school,
@@ -332,6 +399,7 @@ def report(rows, ignored, committed, codes=None):
                 "id": user_id,
                 "role": row.role,
                 "username": row.username,
+                "admission_number": row.admission_number,
                 "name": row.name,
                 "classroom": row.classroom.name if row.classroom else None,
                 "children": [child.username for child in row.children],

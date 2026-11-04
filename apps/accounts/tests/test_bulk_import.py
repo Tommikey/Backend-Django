@@ -127,14 +127,15 @@ def test_usernames_avoid_existing_and_each_other(auth, admin_user, make_user, ot
 def test_spreadsheet_quirks(auth, admin_user, jss1a):
     # Excel: byte-order mark, friendly headers, extra columns, blank lines, spacing in classes
     text = (
-        "﻿Role,First Name,Last Name,Classroom,Admission No\n"
-        "Student,Ada,Obi,jss1 a,A/001\n"
-        ",,,,\n"
-        "student,Tunde,Bello,JSS1A,A/002\n"
+        "\ufeffRole,First Name,Surname,Class,Admission No.,Date of Birth\n"
+        "Student,Ada,Obi,jss1 a,A/001,2013-01-05\n"
+        ",,,,,\n"
+        "student,Tunde,Bello,JSS1A,A/002,\n"
     )
     data = upload(auth(admin_user), text, commit=True).json()
     assert data["valid"] and data["summary"]["enrollments"] == 2
-    assert data["ignored_columns"] == ["admission_no"]
+    assert data["ignored_columns"] == ["date_of_birth"]
+    assert [p["admission_number"] for p in data["people"]] == ["A/001", "A/002"]
     assert [p["row"] for p in data["people"]] == [2, 4]
 
 
@@ -186,3 +187,50 @@ def test_import_cost_does_not_grow_with_rows(auth, admin_user, make_user, jss1a)
     with CaptureQueriesContext(connection) as big:
         assert upload(client, rows(60, "b"), commit=True).status_code == 200
     assert len(big) == len(small)
+
+
+# --- admission numbers -------------------------------------------------------------------------
+
+ADM_HEADER = HEADER.replace("last_name,", "last_name,admission_number,")
+
+
+def test_admission_numbers_import_and_link_parents(auth, admin_user, make_user, jss1a):
+    old = make_user("student", username="old.kid")
+    old.admission_number = "DSS/2019/044"
+    old.save()
+    text = ADM_HEADER + (
+        "student,Ada,Obi,DSS/2025/001,,,JSS1A,,\n"
+        "parent,Ngozi,Obi,,,,,dss/2025/001; DSS/2019/044,Mother\n"  # any case; new and existing
+    )
+    data = upload(auth(admin_user), text, commit=True).json()
+    assert data["valid"], data["errors"]
+    assert User.objects.get(username="ada.obi").admission_number == "DSS/2025/001"
+    linked = set(
+        Guardianship.objects.filter(parent__username="ngozi.obi").values_list(
+            "student__username", flat=True
+        )
+    )
+    assert linked == {"ada.obi", "old.kid"}
+
+
+def test_admission_number_problems(auth, admin_user, make_user):
+    taken = make_user("student")
+    taken.admission_number = "A/9"
+    taken.save()
+    make_user("student", username="A/7")  # a username that is also...
+    other = make_user("student")
+    other.admission_number = "a/7"  # ...another student's admission number
+    other.save()
+    text = ADM_HEADER + (
+        "student,Ada,Obi,A/1,,,,,\n"  # 2
+        "student,Bayo,Ade,a/1,,,,,\n"  # 3: same number as row 2
+        "student,Chi,Eze,A/9,,,,,\n"  # 4: taken in the school
+        "teacher,Musa,Ali,T/1,,,,,\n"  # 5: teachers have none
+        "parent,Mama,Ade,,,,,A/7,\n"  # 6: fits two different students
+    )
+    errors = {
+        e["row"]: " ".join(e["messages"]) for e in upload(auth(admin_user), text).json()["errors"]
+    }
+    assert set(errors) == {3, 4, 5, 6}
+    assert "row 2" in errors[3] and "already belongs" in errors[4]
+    assert "Only students" in errors[5] and "#<row>" in errors[6]

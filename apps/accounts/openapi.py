@@ -29,6 +29,7 @@ class ImportPersonSerializer(serializers.Serializer):
     id = serializers.IntegerField(allow_null=True, help_text="Null until committed")
     role = serializers.CharField()
     username = serializers.CharField(help_text="Generated from the name when left blank")
+    admission_number = serializers.CharField()
     name = serializers.CharField()
     classroom = serializers.CharField(allow_null=True)
     children = serializers.ListField(child=serializers.CharField())

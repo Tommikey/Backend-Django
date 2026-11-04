@@ -14,6 +14,10 @@ class RefSerializer(serializers.Serializer):
     name = serializers.CharField()
 
 
+class StudentRefSerializer(RefSerializer):
+    admission_number = serializers.CharField(help_text="Blank if the school doesn't use them")
+
+
 class TermRefSerializer(RefSerializer):
     session = serializers.CharField(help_text="The session's name, e.g. 2025/2026")
 

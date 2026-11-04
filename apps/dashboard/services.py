@@ -10,6 +10,7 @@ from django.utils import timezone
 from apps.academics.models import Classroom, Enrollment
 from apps.academics.rules import enrolled_exists, teaching_exists
 from apps.accounts.models import User
+from apps.accounts.refs import student_ref
 from apps.assessments.models import Assessment, Submission
 from apps.attendance.models import AttendanceRecord
 from apps.attendance.services import class_attendance, report_card_attendance
@@ -137,7 +138,7 @@ def parent_block(parent, term):
         _, due_count, overdue = student_work(child, term)
         children.append(
             {
-                "student": {"id": child.pk, "name": child.display_name},
+                "student": student_ref(child),
                 "classroom": classes.get(child.pk),
                 "due_count": due_count,
                 "overdue_count": overdue,

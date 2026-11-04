@@ -186,8 +186,18 @@ class EnrollmentViewSet(
     """Which class each student is in, per session (one class per session)."""
 
     serializer_class = EnrollmentSerializer
-    search_fields = ["student__first_name", "student__last_name", "student__username"]
-    ordering_fields = ["created_at", "student__last_name", "student__first_name"]
+    search_fields = [
+        "student__first_name",
+        "student__last_name",
+        "student__username",
+        "student__admission_number",
+    ]
+    ordering_fields = [
+        "created_at",
+        "student__last_name",
+        "student__first_name",
+        "student__admission_number",
+    ]
     queryset = Enrollment.objects.select_related("session", "classroom__level", "student").order_by(
         "-created_at"
     )

@@ -1,6 +1,7 @@
 from django.contrib.auth.models import AbstractUser
 from django.core.exceptions import ValidationError
 from django.db import models
+from django.db.models.functions import Upper
 
 
 class User(AbstractUser):
@@ -15,6 +16,18 @@ class User(AbstractUser):
     school = models.ForeignKey(
         "schools.School", null=True, blank=True, on_delete=models.CASCADE, related_name="users"
     )
+    # the school's own number for a student, e.g. DSS/2025/014; unique in the school (any case)
+    admission_number = models.CharField(max_length=30, blank=True, default="")
+
+    class Meta(AbstractUser.Meta):
+        constraints = [
+            models.UniqueConstraint(
+                Upper("admission_number"),
+                "school",
+                condition=~models.Q(admission_number=""),
+                name="unique_admission_number_in_school",
+            )
+        ]
 
     @property
     def display_name(self):

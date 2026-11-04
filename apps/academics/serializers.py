@@ -226,6 +226,9 @@ class EnrollmentSerializer(SameSchoolSerializerMixin, serializers.ModelSerialize
     session_name = serializers.CharField(source="session.name", read_only=True)
     classroom_name = serializers.CharField(source="classroom.name", read_only=True)
     student_name = serializers.CharField(source="student.display_name", read_only=True)
+    student_admission_number = serializers.CharField(
+        source="student.admission_number", read_only=True
+    )
 
     class Meta:
         model = Enrollment
@@ -237,6 +240,7 @@ class EnrollmentSerializer(SameSchoolSerializerMixin, serializers.ModelSerialize
             "classroom_name",
             "student",
             "student_name",
+            "student_admission_number",
             "created_at",
         ]
         read_only_fields = ["created_at"]
