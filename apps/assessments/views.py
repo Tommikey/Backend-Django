@@ -47,6 +47,11 @@ class AssessmentViewSet(
             super().get_queryset(), self.request.query_params, "classroom", "subject", "term"
         )
 
+    def scope_teacher(self, qs, user):
+        # quizzes carry their answer keys: only for what the teacher teaches, or their form
+        # class (the same rule as for reading submissions)
+        return qs.filter(teaching_exists(user) | Q(classroom__form_teacher=user))
+
     def scope_student(self, qs, user):
         return qs.filter(enrolled_exists(user))
 
