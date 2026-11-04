@@ -10,6 +10,8 @@ from .views import (
     LogoutView,
     MeView,
     PasswordChangeView,
+    PasswordResetConfirmView,
+    PasswordResetRequestView,
     UserViewSet,
 )
 
@@ -26,5 +28,11 @@ urlpatterns = router.urls + [
     path("imports/people/template/", ImportTemplateView.as_view(), name="import-template"),
     path("auth/logout/", LogoutView.as_view(), name="logout"),
     path("auth/password/", PasswordChangeView.as_view(), name="password"),
+    path("auth/password-reset/", PasswordResetRequestView.as_view(), name="password-reset"),
+    path(
+        "auth/password-reset/confirm/",
+        PasswordResetConfirmView.as_view(),
+        name="password-reset-confirm",
+    ),
     path("auth/me/", MeView.as_view(), name="me"),
 ]

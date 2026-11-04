@@ -261,6 +261,16 @@ class ActivateSerializer(serializers.Serializer):
     new_password = serializers.CharField(write_only=True, style={"input_type": "password"})
 
 
+class PasswordResetRequestSerializer(serializers.Serializer):
+    login = serializers.CharField(help_text="Your username or email address")
+
+
+class PasswordResetConfirmSerializer(serializers.Serializer):
+    uid = serializers.CharField()
+    token = serializers.CharField()
+    new_password = serializers.CharField(write_only=True, style={"input_type": "password"})
+
+
 class ActivationCodeIssuedSerializer(serializers.Serializer):
     user = serializers.IntegerField()
     username = serializers.CharField()

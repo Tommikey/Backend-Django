@@ -47,6 +47,10 @@ class ImportResultSerializer(serializers.Serializer):
     people = ImportPersonSerializer(many=True)
 
 
+class DetailSerializer(serializers.Serializer):
+    detail = serializers.CharField()
+
+
 class TokenPairSerializer(serializers.Serializer):
     access = serializers.CharField()
     refresh = serializers.CharField()
