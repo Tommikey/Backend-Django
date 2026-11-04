@@ -1,15 +1,24 @@
 from rest_framework import serializers
 
-from .models import StudySession
+from apps.academics.serializers import TeachingScopeSerializerMixin, term_field
+from apps.accounts.access import SameSchoolSerializerMixin
+
+from .models import LiveClass
 
 
-class StudySessionSerializer(serializers.ModelSerializer):
+class LiveClassSerializer(
+    TeachingScopeSerializerMixin, SameSchoolSerializerMixin, serializers.ModelSerializer
+):
+    term = term_field()
+    term_name = serializers.CharField(source="term.name", read_only=True)
     classroom_name = serializers.CharField(source="classroom.name", read_only=True)
     subject_name = serializers.CharField(source="subject.name", read_only=True)
-    hosted_by_name = serializers.CharField(source="hosted_by.get_full_name", read_only=True)
+    hosted_by_name = serializers.CharField(
+        source="hosted_by.display_name", read_only=True, default=None
+    )
 
     class Meta:
-        model = StudySession
+        model = LiveClass
         fields = [
             "id",
             "title",
@@ -18,6 +27,8 @@ class StudySessionSerializer(serializers.ModelSerializer):
             "classroom_name",
             "subject",
             "subject_name",
+            "term",
+            "term_name",
             "hosted_by",
             "hosted_by_name",
             "starts_at",

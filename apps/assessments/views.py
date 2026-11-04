@@ -1,10 +1,20 @@
+from django.db.models import Q
 from django.utils import timezone
 from rest_framework import mixins, viewsets
 from rest_framework.decorators import action
 from rest_framework.response import Response
 from rest_framework.status import HTTP_409_CONFLICT
 
-from apps.accounts.permissions import IsStudent, IsTeacherOrAdmin
+from apps.academics.permissions import TeachesSubjectOrAdmin
+from apps.academics.rules import enrolled_exists, teaching_exists
+from apps.academics.views import filter_by_params
+from apps.accounts.access import (
+    AudienceScopedMixin,
+    OwnedObjectMixin,
+    RolePermissionsMixin,
+    SchoolScopedMixin,
+)
+from apps.accounts.permissions import IsStudent
 
 from .models import Answer, Assessment, Submission
 from .serializers import (
@@ -16,19 +26,29 @@ from .serializers import (
 )
 
 
-class AssessmentViewSet(viewsets.ModelViewSet):
+class AssessmentViewSet(
+    RolePermissionsMixin,
+    SchoolScopedMixin,
+    AudienceScopedMixin,
+    OwnedObjectMixin,
+    viewsets.ModelViewSet,
+):
     queryset = (
-        Assessment.objects.select_related("classroom", "subject", "created_by")
+        Assessment.objects.select_related("classroom__level", "subject", "term", "created_by")
         .prefetch_related("questions__choices")
         .order_by("-created_at")
     )
+    action_permissions = {"submit": (IsStudent,)}
+    write_object_permissions = (TeachesSubjectOrAdmin,)
+    school_path = "classroom__school"
 
-    def get_permissions(self):
-        if self.action == "submit":
-            return [IsStudent()]
-        if self.action in {"create", "update", "partial_update", "destroy"}:
-            return [IsTeacherOrAdmin()]
-        return []
+    def get_queryset(self):
+        return filter_by_params(
+            super().get_queryset(), self.request.query_params, "classroom", "subject", "term"
+        )
+
+    def scope_student(self, qs, user):
+        return qs.filter(enrolled_exists(user))
 
     def get_serializer_class(self):
         if self.action == "submit":
@@ -36,16 +56,6 @@ class AssessmentViewSet(viewsets.ModelViewSet):
         if self.request.user.role == "student":
             return AssessmentStudentSerializer
         return AssessmentSerializer
-
-    def get_queryset(self):
-        qs = super().get_queryset()
-        user = self.request.user
-        if user.role == "student":
-            qs = qs.filter(classroom__enrollments__student=user).distinct()
-        return qs
-
-    def perform_create(self, serializer):
-        serializer.save(created_by=self.request.user)
 
     @action(detail=True, methods=["post"])
     def submit(self, request, pk=None):
@@ -56,36 +66,36 @@ class AssessmentViewSet(viewsets.ModelViewSet):
         serializer.is_valid(raise_exception=True)
         data = serializer.validated_data
         answers = data.pop("answers", [])
-        submission = Submission.objects.create(
-            assessment=assessment, student=request.user, **data
-        )
+        submission = Submission.objects.create(assessment=assessment, student=request.user, **data)
         Answer.objects.bulk_create([Answer(submission=submission, **answer) for answer in answers])
         if assessment.type == Assessment.Type.QUIZ:
-            submission.score = sum(
-                a["question"].points for a in answers if a["choice"].is_correct
-            )
+            submission.score = sum(a["question"].points for a in answers if a["choice"].is_correct)
             submission.graded_at = timezone.now()
             submission.save(update_fields=["score", "graded_at"])
         return Response(SubmissionSerializer(submission).data, status=201)
 
 
 class SubmissionViewSet(
+    RolePermissionsMixin,
+    SchoolScopedMixin,
+    AudienceScopedMixin,
     mixins.ListModelMixin,
     mixins.RetrieveModelMixin,
     mixins.UpdateModelMixin,
     viewsets.GenericViewSet,
 ):
+    """Students see their own; teachers see work for what they teach (or their form class);
+    only the subject's teacher (or an admin) grades."""
+
     serializer_class = SubmissionSerializer
     queryset = (
-        Submission.objects.select_related("assessment", "student")
+        Submission.objects.select_related("assessment__term", "student")
         .prefetch_related("answers__question", "answers__choice")
         .order_by("-submitted_at")
     )
-
-    def get_permissions(self):
-        if self.action in {"update", "partial_update"}:
-            return [IsTeacherOrAdmin()]
-        return []
+    school_path = "assessment__classroom__school"
+    write_object_permissions = (TeachesSubjectOrAdmin,)
+    teaching_path = "assessment"  # TeachesSubjectOrAdmin reads class/subject/term from there
 
     def get_serializer_class(self):
         if self.action in {"update", "partial_update"}:
@@ -93,14 +103,16 @@ class SubmissionViewSet(
         return SubmissionSerializer
 
     def get_queryset(self):
-        qs = super().get_queryset()
-        user = self.request.user
-        if user.role == "student":
-            qs = qs.filter(student=user)
-        assessment_id = self.request.query_params.get("assessment")
-        if assessment_id:
-            qs = qs.filter(assessment_id=assessment_id)
-        return qs
+        return filter_by_params(super().get_queryset(), self.request.query_params, "assessment")
+
+    def scope_teacher(self, qs, user):
+        return qs.filter(
+            teaching_exists(user, prefix="assessment__")
+            | Q(assessment__classroom__form_teacher=user)
+        )
+
+    def scope_student(self, qs, user):
+        return qs.filter(student=user)
 
     def perform_update(self, serializer):
         serializer.save(graded_at=timezone.now())

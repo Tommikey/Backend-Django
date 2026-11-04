@@ -1,12 +1,18 @@
 from django.contrib import admin
 from django.contrib.auth.admin import UserAdmin
 
-from .models import User
+from .models import Guardianship, User
 
 
 @admin.register(User)
 class CustomUserAdmin(UserAdmin):
-    list_display = ["username", "email", "role", "is_active"]
-    list_filter = UserAdmin.list_filter + ("role",)
-    fieldsets = UserAdmin.fieldsets + (("Role", {"fields": ("role",)}),)
-    add_fieldsets = UserAdmin.add_fieldsets + (("Role", {"fields": ("role",)}),)
+    list_display = ["username", "email", "role", "school", "is_active"]
+    list_filter = UserAdmin.list_filter + ("role", "school")
+    fieldsets = UserAdmin.fieldsets + (("School", {"fields": ("school", "role")}),)
+    add_fieldsets = UserAdmin.add_fieldsets + (("School", {"fields": ("school", "role")}),)
+
+
+@admin.register(Guardianship)
+class GuardianshipAdmin(admin.ModelAdmin):
+    list_display = ["parent", "student", "relationship", "created_at"]
+    search_fields = ["parent__username", "student__username"]
