@@ -1,7 +1,8 @@
 from django.utils import timezone
 from rest_framework import viewsets
+from rest_framework.permissions import IsAuthenticated
 
-from apps.accounts.permissions import IsTeacherOrAdmin
+from apps.accounts.permissions import IsOwnerOrAdmin, IsTeacherOrAdmin
 
 from .models import StudySession
 from .serializers import StudySessionSerializer
@@ -12,11 +13,14 @@ class StudySessionViewSet(viewsets.ModelViewSet):
     queryset = StudySession.objects.select_related("classroom", "subject", "hosted_by").order_by(
         "starts_at"
     )
+    owner_field = "hosted_by"
 
     def get_permissions(self):
-        if self.action in {"create", "update", "partial_update", "destroy"}:
+        if self.action in {"update", "partial_update", "destroy"}:
+            return [IsTeacherOrAdmin(), IsOwnerOrAdmin()]
+        if self.action == "create":
             return [IsTeacherOrAdmin()]
-        return []
+        return [IsAuthenticated()]
 
     def get_queryset(self):
         qs = super().get_queryset()

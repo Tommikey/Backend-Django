@@ -1,10 +1,11 @@
 from django.utils import timezone
 from rest_framework import mixins, viewsets
 from rest_framework.decorators import action
+from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 from rest_framework.status import HTTP_409_CONFLICT
 
-from apps.accounts.permissions import IsStudent, IsTeacherOrAdmin
+from apps.accounts.permissions import IsOwnerOrAdmin, IsStudent, IsTeacherOrAdmin
 
 from .models import Answer, Assessment, Submission
 from .serializers import (
@@ -26,9 +27,11 @@ class AssessmentViewSet(viewsets.ModelViewSet):
     def get_permissions(self):
         if self.action == "submit":
             return [IsStudent()]
-        if self.action in {"create", "update", "partial_update", "destroy"}:
+        if self.action in {"update", "partial_update", "destroy"}:
+            return [IsTeacherOrAdmin(), IsOwnerOrAdmin()]
+        if self.action == "create":
             return [IsTeacherOrAdmin()]
-        return []
+        return [IsAuthenticated()]
 
     def get_serializer_class(self):
         if self.action == "submit":
@@ -85,7 +88,7 @@ class SubmissionViewSet(
     def get_permissions(self):
         if self.action in {"update", "partial_update"}:
             return [IsTeacherOrAdmin()]
-        return []
+        return [IsAuthenticated()]
 
     def get_serializer_class(self):
         if self.action in {"update", "partial_update"}:
