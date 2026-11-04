@@ -15,6 +15,7 @@ from collections import defaultdict
 from decimal import ROUND_HALF_UP, Decimal
 
 from django.db import transaction
+from django.utils import timezone
 
 from apps.academics.models import Enrollment, Term
 from apps.accounts.models import User
@@ -149,55 +150,91 @@ def compute_class_results(classroom, term):
 
 
 def classrooms_in_session(school, session):
-    return school.classrooms.filter(enrollments__session=session).distinct()
+    return (
+        school.classrooms.filter(enrollments__session=session)
+        .select_related("school", "form_teacher")
+        .distinct()
+    )
+
+
+# the computed fields of a TermResult, (re)written at publish time
+PUBLISHED_FIELDS = [
+    "classroom",
+    "total",
+    "average",
+    "subjects_count",
+    "position",
+    "out_of",
+    "gpa",
+    "form_teacher_name",
+    "attendance",
+    "updated_at",
+]
 
 
 @transaction.atomic
 def publish_term(term, user):
-    """Snapshot every class's results for ``term`` and lock its scores."""
+    """Snapshot every class's results for ``term`` and lock its scores.
+
+    Writes in bulk per class, so publishing costs a handful of queries per class rather than
+    several per student.
+    """
     school = term.session.school
+    now = timezone.now()
     for classroom in classrooms_in_session(school, term.session):
         form_teacher = classroom.form_teacher.display_name if classroom.form_teacher else ""
         rows = compute_class_results(classroom, term)["students"]
-        attendance = class_attendance(classroom, term, [row["student"] for row in rows])
+        if not rows:
+            continue
+        students = [row["student"] for row in rows]
+        attendance = class_attendance(classroom, term, students)
+        # comments written before publishing live on existing TermResults: keep those rows
+        existing = {
+            r.student_id: r for r in TermResult.objects.filter(term=term, student__in=students)
+        }
+
+        results = []
         for row in rows:
             summary = row["summary"]
-            result, _ = TermResult.objects.update_or_create(
-                student=row["student"],
-                term=term,
-                defaults={
-                    "classroom": classroom,
-                    "total": summary["total"],
-                    "average": summary["average"],
-                    "subjects_count": summary["subjects_count"],
-                    "position": summary["position"],
-                    "out_of": summary["out_of"],
-                    "gpa": summary["gpa"],
-                    "form_teacher_name": form_teacher,
-                    "attendance": report_card_attendance(attendance[row["student"].pk]),
-                },
+            result = existing.get(row["student"].pk) or TermResult(
+                student=row["student"], term=term
             )
-            result.subject_results.all().delete()
-            SubjectResult.objects.bulk_create(
-                SubjectResult(
-                    term_result=result,
-                    subject=line["subject"],
-                    subject_name=line["subject"].name,
-                    scores=[
-                        {**s, "value": str(s["value"]) if s["value"] is not None else None}
-                        for s in line["scores"]
-                    ],
-                    total=line["total"],
-                    grade=line["grade"],
-                    remark=line["remark"],
-                    grade_point=line["grade_point"],
-                    class_average=line["class_average"],
-                    class_highest=line["class_highest"],
-                    class_lowest=line["class_lowest"],
-                    position=line["position"],
-                )
-                for line in row["subjects"]
+            result.classroom = classroom
+            result.total = summary["total"]
+            result.average = summary["average"]
+            result.subjects_count = summary["subjects_count"]
+            result.position = summary["position"]
+            result.out_of = summary["out_of"]
+            result.gpa = summary["gpa"]
+            result.form_teacher_name = form_teacher
+            result.attendance = report_card_attendance(attendance[row["student"].pk])
+            result.updated_at = now
+            results.append(result)
+        TermResult.objects.bulk_update([r for r in results if r.pk], PUBLISHED_FIELDS)
+        TermResult.objects.bulk_create([r for r in results if not r.pk])
+
+        SubjectResult.objects.filter(term_result__in=results).delete()
+        SubjectResult.objects.bulk_create(
+            SubjectResult(
+                term_result=result,
+                subject=line["subject"],
+                subject_name=line["subject"].name,
+                scores=[
+                    {**s, "value": str(s["value"]) if s["value"] is not None else None}
+                    for s in line["scores"]
+                ],
+                total=line["total"],
+                grade=line["grade"],
+                remark=line["remark"],
+                grade_point=line["grade_point"],
+                class_average=line["class_average"],
+                class_highest=line["class_highest"],
+                class_lowest=line["class_lowest"],
+                position=line["position"],
             )
+            for result, row in zip(results, rows, strict=True)
+            for line in row["subjects"]
+        )
     return Publication.objects.create(
         term=term,
         published_by=user,
