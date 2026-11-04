@@ -11,6 +11,12 @@ PASSWORD = "Yap-Dev-Pass-9!"  # must pass Django's common-password validator
 
 
 @pytest.fixture(autouse=True)
+def _plain_http(settings):
+    # CI runs with DEBUG=False, which turns on HTTPS redirects; the test client speaks HTTP
+    settings.SECURE_SSL_REDIRECT = False
+
+
+@pytest.fixture(autouse=True)
 def _fast_password_hashing(settings):
     # the production hasher is deliberately slow; tests don't need that
     settings.PASSWORD_HASHERS = ["django.contrib.auth.hashers.MD5PasswordHasher"]

@@ -57,5 +57,10 @@ jobs:
           python manage.py check
           python manage.py makemigrations --check --dry-run
 
+      - name: Deployment checks
+        env:
+          ALLOWED_HOSTS: api.example.com
+        run: python manage.py check --deploy --fail-level WARNING
+
       - name: Tests
         run: pytest -q
