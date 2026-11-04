@@ -5,7 +5,7 @@ from rest_framework.permissions import AllowAny, IsAuthenticated
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
-from apps.accounts.access import InUse, RolePermissionsMixin, SchoolScopedMixin
+from apps.accounts.access import InUse, RolePermissionsMixin, SafeDestroyMixin, SchoolScopedMixin
 from apps.accounts.permissions import IsAdmin
 from apps.accounts.serializers import UserSerializer
 from apps.results.models import Score
@@ -59,7 +59,9 @@ class MySchoolView(generics.RetrieveUpdateAPIView):
         return school
 
 
-class LevelViewSet(RolePermissionsMixin, SchoolScopedMixin, viewsets.ModelViewSet):
+class LevelViewSet(
+    RolePermissionsMixin, SchoolScopedMixin, SafeDestroyMixin, viewsets.ModelViewSet
+):
     serializer_class = LevelSerializer
     queryset = Level.objects.order_by("order")
     write_permissions = (IsAdmin,)

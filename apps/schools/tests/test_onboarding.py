@@ -199,3 +199,13 @@ def test_admin_adds_level_names_unique_per_school(auth, admin_user, make_user):
     assert auth(admin_user).post(LEVELS_URL, {"name": "jss1", "order": 9}).status_code == 400
     teacher = make_user("teacher")
     assert auth(teacher).post(LEVELS_URL, {"name": "SS4", "order": 7}).status_code == 403
+
+
+def test_level_with_classes_cannot_be_deleted(auth, admin_user, school):
+    from conftest import make_classroom
+
+    classroom = make_classroom(school, "A")
+    url = f"/api/v1/schools/levels/{classroom.level_id}/"
+    assert auth(admin_user).delete(url).status_code == 409
+    classroom.delete()
+    assert auth(admin_user).delete(url).status_code == 204
