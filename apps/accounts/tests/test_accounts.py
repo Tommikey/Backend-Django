@@ -294,3 +294,67 @@ def test_admin_reset_ends_the_users_sessions(api, auth, admin_user, make_user):
     assert bearer(api, tokens["access"]).get("/api/v1/auth/me/").status_code == 401
     api.credentials()
     assert api.post(REFRESH_URL, {"refresh": tokens["refresh"]}).status_code == 401
+
+
+# --- me: what a client needs to start ---------------------------------------------------------
+
+ME_URL = "/api/v1/auth/me/"
+
+
+def test_me_bootstraps_a_teacher(auth, kit):
+    kit.classroom.form_teacher = kit.teacher
+    kit.classroom.save()
+    data = auth(kit.teacher).get(ME_URL).json()
+    assert data["school_details"]["system"] == "ng"
+    assert data["school_details"]["term_labels"] == ["First Term", "Second Term", "Third Term"]
+    assert data["current_session"] == {"id": kit.session.pk, "name": "2025/2026"}
+    assert data["current_term"]["id"] == kit.term.pk
+    assert data["form_classes"] == [{"id": kit.classroom.pk, "name": "JSS1A"}]
+    assert data["teaching"] == [
+        {
+            "classroom": {"id": kit.classroom.pk, "name": "JSS1A"},
+            "subject": {"id": kit.subject.pk, "name": "Mathematics"},
+        }
+    ]
+    assert data["classroom"] is None and data["children"] == []
+
+
+def test_me_bootstraps_a_student_and_a_parent(auth, kit, make_user):
+    data = auth(kit.student).get(ME_URL).json()
+    assert data["classroom"] == {"id": kit.classroom.pk, "name": "JSS1A"}
+    assert data["teaching"] == [] and data["form_classes"] == []
+
+    parent = make_user("parent")
+    Guardianship.objects.create(parent=parent, student=kit.student, relationship="Mother")
+    Guardianship.objects.create(parent=parent, student=kit.outsider)  # in no class
+    children = auth(parent).get(ME_URL).json()["children"]
+    by_id = {c["id"]: c for c in children}
+    assert by_id[kit.student.pk]["classroom"]["name"] == "JSS1A"
+    assert by_id[kit.student.pk]["relationship"] == "Mother"
+    assert by_id[kit.outsider.pk]["classroom"] is None
+
+
+def test_me_query_count_is_flat(auth, kit, make_user, django_assert_max_num_queries):
+    parent = make_user("parent")
+    for _ in range(5):
+        child = make_user("student")
+        from conftest import enroll
+
+        enroll(child, kit.classroom)
+        Guardianship.objects.create(parent=parent, student=child)
+    with django_assert_max_num_queries(8):
+        assert auth(parent).get(ME_URL).status_code == 200
+
+
+def test_me_patch_edits_profile_only(auth, kit):
+    r = auth(kit.student).patch(ME_URL, {"first_name": "Ada", "role": "admin"})
+    assert r.status_code == 200
+    kit.student.refresh_from_db()
+    assert kit.student.first_name == "Ada" and kit.student.role == "student"
+    assert r.json()["classroom"]["name"] == "JSS1A"
+
+
+def test_me_for_platform_staff(auth, db):
+    boss = User.objects.create_superuser(username="root", email="r@yap.school", password=PASSWORD)
+    data = auth(boss).get(ME_URL).json()
+    assert data["school_details"] is None and data["current_term"] is None

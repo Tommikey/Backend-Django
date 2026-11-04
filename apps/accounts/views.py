@@ -14,9 +14,9 @@ from .models import Guardianship, User
 from .permissions import IsAdmin, IsTeacherOrAdmin
 from .serializers import (
     GuardianshipSerializer,
+    MeSerializer,
     PasswordChangeSerializer,
     SchoolUserSerializer,
-    UserSerializer,
 )
 from .throttles import LoginUsernameThrottle
 
@@ -53,7 +53,10 @@ class PasswordChangeView(APIView):
 
 
 class MeView(generics.RetrieveUpdateAPIView):
-    serializer_class = UserSerializer
+    """GET: your profile and what a client needs to start (see MeSerializer). PATCH: edit your
+    name and email."""
+
+    serializer_class = MeSerializer
 
     def get_object(self):
         return self.request.user

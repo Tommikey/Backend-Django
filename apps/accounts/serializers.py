@@ -1,4 +1,5 @@
 from django.contrib.auth.password_validation import validate_password
+from drf_spectacular.utils import extend_schema_field
 from rest_framework import serializers
 
 from .access import SameSchoolSerializerMixin
@@ -24,6 +25,152 @@ class UserSerializer(serializers.ModelSerializer):
             "school_name",
         ]
         read_only_fields = ["username", "role", "school"]
+
+
+class _Ref(serializers.Serializer):
+    id = serializers.IntegerField()
+    name = serializers.CharField()
+
+
+class _SchoolDetails(_Ref):
+    slug = serializers.CharField()
+    system = serializers.CharField()
+    system_name = serializers.CharField()
+    show_position = serializers.BooleanField()
+    use_gpa = serializers.BooleanField()
+    term_labels = serializers.ListField(child=serializers.CharField())
+
+
+class _TermRef(_Ref):
+    session = _Ref()
+
+
+class _Teaching(serializers.Serializer):
+    classroom = _Ref()
+    subject = _Ref()
+
+
+class _Child(_Ref):
+    relationship = serializers.CharField()
+    classroom = _Ref(allow_null=True, help_text="Their class in the current session")
+
+
+def _ref(obj):
+    return {"id": obj.pk, "name": obj.name}
+
+
+class MeSerializer(UserSerializer):
+    """Your profile plus what a client needs to draw its shell, in one call: the school's
+    settings, the current session and term, and what you work with in it (a teacher's classes,
+    a student's class, a parent's children). Role-specific lists are empty for other roles.
+    """
+
+    school_details = serializers.SerializerMethodField()
+    current_session = serializers.SerializerMethodField()
+    current_term = serializers.SerializerMethodField()
+    form_classes = serializers.SerializerMethodField()
+    teaching = serializers.SerializerMethodField()
+    classroom = serializers.SerializerMethodField()
+    children = serializers.SerializerMethodField()
+
+    class Meta(UserSerializer.Meta):
+        fields = [
+            *UserSerializer.Meta.fields,
+            "school_details",
+            "current_session",
+            "current_term",
+            "form_classes",
+            "teaching",
+            "classroom",
+            "children",
+        ]
+
+    def _term(self, user):
+        if not hasattr(self, "_cached_term"):
+            from apps.academics.rules import current_term
+
+            self._cached_term = current_term(user.school_id) if user.school_id else None
+        return self._cached_term
+
+    @extend_schema_field(_SchoolDetails(allow_null=True))
+    def get_school_details(self, user):
+        school = user.school
+        if school is None:
+            return None
+        return {
+            "id": school.pk,
+            "name": school.name,
+            "slug": school.slug,
+            "system": school.system,
+            "system_name": school.get_system_display(),
+            "show_position": school.show_position,
+            "use_gpa": school.use_gpa,
+            "term_labels": school.term_labels,
+        }
+
+    @extend_schema_field(_Ref(allow_null=True))
+    def get_current_session(self, user):
+        term = self._term(user)
+        return _ref(term.session) if term else None
+
+    @extend_schema_field(_TermRef(allow_null=True))
+    def get_current_term(self, user):
+        term = self._term(user)
+        return {**_ref(term), "session": _ref(term.session)} if term else None
+
+    @extend_schema_field(_Ref(many=True))
+    def get_form_classes(self, user):
+        if user.role != User.Role.TEACHER:
+            return []
+        return [_ref(c) for c in user.form_classes.select_related("level")]
+
+    @extend_schema_field(_Teaching(many=True))
+    def get_teaching(self, user):
+        term = self._term(user)
+        if user.role != User.Role.TEACHER or term is None:
+            return []
+        assignments = (
+            user.teaching_assignments.filter(session_id=term.session_id)
+            .select_related("classroom__level", "subject")
+            .order_by("classroom__level__order", "classroom__arm", "subject__name")
+        )
+        return [{"classroom": _ref(a.classroom), "subject": _ref(a.subject)} for a in assignments]
+
+    @extend_schema_field(_Ref(allow_null=True))
+    def get_classroom(self, user):
+        term = self._term(user)
+        if user.role != User.Role.STUDENT or term is None:
+            return None
+        enrollment = (
+            user.enrollments.filter(session_id=term.session_id)
+            .select_related("classroom__level")
+            .first()
+        )
+        return _ref(enrollment.classroom) if enrollment else None
+
+    @extend_schema_field(_Child(many=True))
+    def get_children(self, user):
+        if user.role != User.Role.PARENT:
+            return []
+        from apps.academics.models import Enrollment
+
+        term = self._term(user)
+        links = list(user.children_links.select_related("student").order_by("student__first_name"))
+        classes = {}
+        if term is not None:
+            for e in Enrollment.objects.filter(
+                session_id=term.session_id, student__in=[link.student for link in links]
+            ).select_related("classroom__level"):
+                classes[e.student_id] = _ref(e.classroom)
+        return [
+            {
+                "id": link.student.pk,
+                "name": link.student.display_name,
+                "relationship": link.relationship,
+                "classroom": classes.get(link.student_id),
+            }
+            for link in links
+        ]
 
 
 class SchoolUserSerializer(serializers.ModelSerializer):
