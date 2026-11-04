@@ -129,6 +129,8 @@ class SubjectViewSet(
     viewsets.ModelViewSet,
 ):
     serializer_class = SubjectSerializer
+    search_fields = ["name"]
+    ordering_fields = ["name"]
     queryset = Subject.objects.order_by("name")
     write_permissions = (IsAdmin,)
 
@@ -143,6 +145,8 @@ class ClassroomViewSet(
     """Class arms (JSS2A). Admins manage them and pick form teachers."""
 
     serializer_class = ClassroomSerializer
+    search_fields = ["arm", "level__name", "form_teacher__first_name", "form_teacher__last_name"]
+    ordering_fields = ["level__order", "arm", "created_at"]
     queryset = Classroom.objects.select_related("level", "form_teacher")
     write_permissions = (IsAdmin,)
 
@@ -160,6 +164,8 @@ class TeachingAssignmentViewSet(
     """Who teaches which subject to which class, per session. ?mine=true for your own."""
 
     serializer_class = TeachingAssignmentSerializer
+    search_fields = ["subject__name", "teacher__first_name", "teacher__last_name"]
+    ordering_fields = ["classroom__level__order", "subject__name", "teacher__last_name"]
     queryset = TeachingAssignment.objects.select_related(
         "session", "classroom__level", "subject", "teacher"
     ).order_by("classroom__level__order", "classroom__arm", "subject__name")
@@ -180,6 +186,8 @@ class EnrollmentViewSet(
     """Which class each student is in, per session (one class per session)."""
 
     serializer_class = EnrollmentSerializer
+    search_fields = ["student__first_name", "student__last_name", "student__username"]
+    ordering_fields = ["created_at", "student__last_name", "student__first_name"]
     queryset = Enrollment.objects.select_related("session", "classroom__level", "student").order_by(
         "-created_at"
     )
@@ -206,6 +214,8 @@ class LessonViewSet(
     viewsets.ModelViewSet,
 ):
     serializer_class = LessonSerializer
+    search_fields = ["title", "content"]
+    ordering_fields = ["created_at", "title"]
     queryset = Lesson.objects.select_related(
         "classroom__level", "subject", "term", "created_by"
     ).order_by("-created_at")

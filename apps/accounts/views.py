@@ -66,6 +66,8 @@ class UserViewSet(RolePermissionsMixin, SchoolScopedMixin, viewsets.ModelViewSet
     """The school's people. Admins manage them; teachers can look them up."""
 
     serializer_class = SchoolUserSerializer
+    search_fields = ["username", "first_name", "last_name", "email"]
+    ordering_fields = ["last_name", "first_name", "username", "role", "date_joined"]
     queryset = User.objects.order_by("role", "last_name", "first_name", "username")
     write_permissions = (IsAdmin,)
     action_permissions = {"list": (IsTeacherOrAdmin,), "retrieve": (IsTeacherOrAdmin,)}
@@ -110,6 +112,15 @@ class GuardianshipViewSet(RolePermissionsMixin, SchoolScopedMixin, viewsets.Mode
     """Parent-to-student links. Admins manage them; parents and students see their own."""
 
     serializer_class = GuardianshipSerializer
+    search_fields = [
+        "parent__first_name",
+        "parent__last_name",
+        "parent__username",
+        "student__first_name",
+        "student__last_name",
+        "student__username",
+    ]
+    ordering_fields = ["created_at", "student__last_name", "parent__last_name"]
     queryset = Guardianship.objects.select_related("parent", "student").order_by("-created_at")
     school_path = "student__school"
     write_permissions = (IsAdmin,)

@@ -358,3 +358,31 @@ def test_me_for_platform_staff(auth, db):
     boss = User.objects.create_superuser(username="root", email="r@yap.school", password=PASSWORD)
     data = auth(boss).get(ME_URL).json()
     assert data["school_details"] is None and data["current_term"] is None
+
+
+# --- lists a UI can drive ----------------------------------------------------------------------
+
+
+def test_user_search_ordering_and_page_size(auth, admin_user, make_user, other_school):
+    for first in ("Zainab", "Ada", "Bola"):
+        u = make_user("student")
+        u.first_name, u.last_name = first, "Okoro"
+        u.save()
+    stranger = make_user("student", school=other_school)
+    stranger.first_name = "Ada"
+    stranger.save()
+    client = auth(admin_user)
+
+    rows = results(client.get(USERS_URL, {"search": "ada"}).json())
+    assert [r["first_name"] for r in rows] == ["Ada"]  # not the other school's Ada
+
+    rows = results(client.get(USERS_URL, {"search": "okoro", "ordering": "-first_name"}).json())
+    assert [r["first_name"] for r in rows] == ["Zainab", "Bola", "Ada"]
+
+    page = client.get(USERS_URL, {"page_size": 2}).json()
+    assert len(page["results"]) == 2 and page["next"]
+    big = client.get(USERS_URL, {"page_size": 10_000}).json()
+    assert len(big["results"]) <= 200
+
+    # ordering by something not offered is ignored, not an error
+    assert client.get(USERS_URL, {"ordering": "password"}).status_code == 200

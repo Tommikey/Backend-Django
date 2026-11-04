@@ -39,6 +39,8 @@ class AssessmentViewSet(
         .order_by("-created_at")
     )
     action_permissions = {"submit": (IsStudent,)}
+    search_fields = ["title", "description"]
+    ordering_fields = ["created_at", "due_at", "title"]
     write_object_permissions = (TeachesSubjectOrAdmin,)
     school_path = "classroom__school"
 
@@ -94,6 +96,13 @@ class SubmissionViewSet(
     only the subject's teacher (or an admin) grades."""
 
     serializer_class = SubmissionSerializer
+    search_fields = [
+        "student__first_name",
+        "student__last_name",
+        "student__username",
+        "assessment__title",
+    ]
+    ordering_fields = ["submitted_at", "graded_at", "score", "student__last_name"]
     queryset = (
         Submission.objects.select_related("assessment__term", "student")
         .prefetch_related("answers__question", "answers__choice")
