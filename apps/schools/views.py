@@ -5,9 +5,10 @@ from rest_framework.permissions import AllowAny, IsAuthenticated
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
-from apps.accounts.access import RolePermissionsMixin, SchoolScopedMixin
+from apps.accounts.access import InUse, RolePermissionsMixin, SchoolScopedMixin
 from apps.accounts.permissions import IsAdmin
 from apps.accounts.serializers import UserSerializer
+from apps.results.models import Score
 
 from .models import AssessmentComponent, GradeBand, Level
 from .serializers import (
@@ -90,6 +91,7 @@ class ReplaceAllConfigView(APIView):
     def put(self, request):
         serializer = self.set_serializer(data=request.data)
         serializer.is_valid(raise_exception=True)
+        self.check_replaceable(request)
         self.get_items().delete()
         self.model.objects.bulk_create(
             self.model(school=request.user.school, **self.extra_fields(i), **item)
@@ -99,6 +101,9 @@ class ReplaceAllConfigView(APIView):
 
     def extra_fields(self, position):
         return {}
+
+    def check_replaceable(self, request):
+        """Hook: refuse the replacement (raise) when existing data depends on the old set."""
 
 
 class ComponentsView(ReplaceAllConfigView):
@@ -111,6 +116,13 @@ class ComponentsView(ReplaceAllConfigView):
 
     def extra_fields(self, position):
         return {"order": position}  # the order they were sent in
+
+    def check_replaceable(self, request):
+        if Score.objects.filter(component__school_id=request.user.school_id).exists():
+            raise InUse(
+                "Scores have already been entered with the current split, so it can't be "
+                "replaced. Clear those scores first."
+            )
 
 
 class GradeBandsView(ReplaceAllConfigView):

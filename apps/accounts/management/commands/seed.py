@@ -18,6 +18,7 @@ from apps.academics.services import create_session
 from apps.accounts.models import Guardianship, User
 from apps.assessments.models import Answer, Assessment, Choice, Question, Submission
 from apps.live_classes.models import LiveClass
+from apps.results.models import Score, TermResult
 from apps.schools.models import School
 from apps.schools.services import onboard_school
 
@@ -186,6 +187,37 @@ def build_school(slug, name, system, prefix):
         text="Science is everywhere, from cooking to phones.",
         score=7,
         graded_at=now,
+    )
+
+    # term scores for class A (not published, so the admin can try publishing): each student
+    # gets a share of every component's maximum, so totals differ and positions are visible
+    components = list(school.components.order_by("order"))
+    share = {
+        (maths, 0): 0.9,
+        (maths, 1): 0.7,
+        (maths, 2): 0.45,
+        (english, 0): 0.8,
+        (english, 1): 0.75,
+        (english, 2): 0.6,
+    }
+    Score.objects.bulk_create(
+        Score(
+            student=student,
+            subject=subject,
+            term=term,
+            component=component,
+            value=round(component.max_score * share[(subject, i)], 2),
+            entered_by=teacher1,
+        )
+        for i, student in enumerate(students[:3])
+        for subject in (maths, english)
+        for component in components
+    )
+    TermResult.objects.create(
+        student=students[0],
+        term=term,
+        classroom=class_a,
+        form_teacher_comment="A hardworking and attentive student.",
     )
 
     LiveClass.objects.create(
