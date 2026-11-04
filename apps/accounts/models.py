@@ -50,3 +50,19 @@ class Guardianship(models.Model):
             raise ValidationError({"student": "Must be a student account."})
         if self.parent.school_id != self.student.school_id:
             raise ValidationError("Parent and student must belong to the same school.")
+
+
+class ActivationCode(models.Model):
+    """A one-time code someone uses to choose their own password: issued when an account is
+    imported (printed on a login slip) or reissued by an admin. Only a keyed hash is stored;
+    see apps/accounts/activation.py.
+    """
+
+    user = models.OneToOneField(User, on_delete=models.CASCADE, related_name="activation_code")
+    code_hash = models.CharField(max_length=64)
+    expires_at = models.DateTimeField()
+    created_by = models.ForeignKey(User, null=True, on_delete=models.SET_NULL, related_name="+")
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    def __str__(self):
+        return f"activation code for {self.user}"

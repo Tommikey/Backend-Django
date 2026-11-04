@@ -179,6 +179,20 @@ class SchoolUserSerializer(serializers.ModelSerializer):
     password = serializers.CharField(
         write_only=True, required=False, style={"input_type": "password"}
     )
+    has_password = serializers.SerializerMethodField(
+        help_text="False until an imported person activates their account"
+    )
+    activation_expires_at = serializers.SerializerMethodField(
+        help_text="When their unused activation code expires; null if none is pending"
+    )
+
+    def get_has_password(self, user) -> bool:
+        return user.has_usable_password()
+
+    @extend_schema_field(serializers.DateTimeField(allow_null=True))
+    def get_activation_expires_at(self, user):
+        code = getattr(user, "activation_code", None)
+        return code.expires_at if code else None
 
     class Meta:
         model = User
@@ -192,6 +206,8 @@ class SchoolUserSerializer(serializers.ModelSerializer):
             "is_active",
             "password",
             "date_joined",
+            "has_password",
+            "activation_expires_at",
         ]
         read_only_fields = ["date_joined"]
 
@@ -237,6 +253,19 @@ class SchoolUserSerializer(serializers.ModelSerializer):
             user.save(update_fields=["password"])
             end_sessions(user)
         return user
+
+
+class ActivateSerializer(serializers.Serializer):
+    username = serializers.CharField()
+    code = serializers.CharField(help_text="As printed, e.g. K7M2-QX9P (case and dash optional)")
+    new_password = serializers.CharField(write_only=True, style={"input_type": "password"})
+
+
+class ActivationCodeIssuedSerializer(serializers.Serializer):
+    user = serializers.IntegerField()
+    username = serializers.CharField()
+    code = serializers.CharField(help_text="Shown once; give it to the person")
+    expires_at = serializers.DateTimeField()
 
 
 class PasswordChangeSerializer(serializers.Serializer):
