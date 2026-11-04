@@ -34,7 +34,10 @@ Built with Django 5.2, Django REST Framework, JWT auth (SimpleJWT) and PostgreSQ
 - **Parents** see their linked children, their attendance and their published report cards.
 - **Schools are isolated.** Another school's data behaves as if it doesn't exist; IDs from other
   schools are rejected as unknown, not forbidden.
-- **Platform staff** (superusers) use the Django admin only and belong to no school.
+- **Platform staff** (superusers) use the Django admin only and belong to no school. They can
+  suspend a school (`is_active`), which signs out all of its users at once.
+- **Records are kept.** People with school records (classes, marks, attendance, work) can't be
+  deleted, only deactivated, and a role can't change after an account is created.
 
 ### Results in brief
 
@@ -105,15 +108,21 @@ curl -X POST localhost:8000/api/v1/auth/token/ \
 curl localhost:8000/api/v1/auth/me/ -H 'Authorization: Bearer <access>'
 ```
 
-Access tokens last 1 hour; refresh them at `POST /api/v1/auth/token/refresh/`. List endpoints are
-paginated (50 per page). Endpoints that work on a term default to the school's current term when
-`term` is left out.
+Access tokens last 1 hour. Refresh them at `POST /api/v1/auth/token/refresh/`, which also returns
+a new refresh token (the old one stops working). `POST auth/logout/` with `{"refresh": ...}` ends a
+device's session. `POST auth/password/` with `current_password` and `new_password` changes your
+own password and returns fresh tokens. Any password change, including an admin reset, signs the
+person out everywhere else.
+
+List endpoints are paginated (50 per page). Endpoints that work on a term default to the school's
+current term when `term` is left out. Login is limited to 10 attempts a minute per username, and
+school sign-up to 10 an hour per IP; going over returns `429`.
 
 All routes are under `/api/v1/`:
 
 | Area | Routes |
 | --- | --- |
-| Auth | `auth/token/`, `auth/token/refresh/`, `auth/me/` |
+| Auth | `auth/token/`, `auth/token/refresh/`, `auth/logout/`, `auth/password/`, `auth/me/` |
 | Schools | `schools/onboard/`, `schools/me/`, `schools/levels/`, `schools/components/`, `schools/grade-bands/` |
 | People | `users/`, `guardianships/` |
 | School year | `academics/academic-sessions/`, `academics/terms/`, `academics/subjects/`, `academics/classrooms/`, `academics/teaching-assignments/`, `academics/enrollments/` |
@@ -146,8 +155,31 @@ ruff check .            # lint
 ruff format .           # format
 ```
 
-Configuration comes from `.env` (see `.env.example`): `SECRET_KEY`, `DEBUG`, `DATABASE_URL`,
-`ALLOWED_HOSTS` and `CORS_ALLOW_ALL_ORIGINS`. Never commit `.env`.
+Configuration comes from `.env` (see `.env.example`). Never commit `.env`.
+
+| Setting | Default | Notes |
+| --- | --- | --- |
+| `SECRET_KEY` | (required) | Long and random in production |
+| `DATABASE_URL` | (required) | |
+| `DEBUG` | `False` | Turn on for local development only |
+| `ALLOWED_HOSTS` | `localhost,127.0.0.1` | |
+| `CORS_ALLOWED_ORIGINS` | empty | The frontend's origin(s), e.g. `https://app.example.com` |
+| `CORS_ALLOW_ALL_ORIGINS` | `False` | Local development only |
+| `CSRF_TRUSTED_ORIGINS` | empty | The Django admin's `https://` origin |
+| `SECURE_SSL_REDIRECT` | `True` | With `DEBUG=False`: redirect HTTP to HTTPS |
+| `SECURE_HSTS_SECONDS` | 30 days | With `DEBUG=False` |
+| `NUM_PROXIES` | `0` | Proxies in front of the app (e.g. `1` behind a load balancer), so rate limits see real client IPs |
+| `LOG_LEVEL` | `INFO` | Logs go to stdout |
+
+### Production notes
+
+- Run behind a proxy that terminates TLS and sets `X-Forwarded-Proto`. Run
+  `python manage.py collectstatic` at build time; WhiteNoise serves the admin's assets.
+- Rate limits are counted in Django's cache. The default in-memory cache is per process, so with
+  several gunicorn workers, point `CACHES` at Redis to make the limits exact.
+- Uploaded files (lessons, submissions) go to `MEDIA_ROOT` and aren't served by Django when
+  `DEBUG=False`. Private file storage is on the roadmap.
+- CI runs `manage.py check --deploy`.
 
 ## License
 

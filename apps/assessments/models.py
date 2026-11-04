@@ -2,6 +2,7 @@ from django.conf import settings
 from django.db import models
 
 from apps.academics.models import Classroom, Subject, Term
+from apps.academics.validators import UPLOAD_VALIDATORS
 
 
 class Assessment(models.Model):
@@ -53,7 +54,9 @@ class Submission(models.Model):
         settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name="submissions"
     )
     text = models.TextField(blank=True)
-    file = models.FileField(upload_to="submissions/%Y/%m/", blank=True)
+    file = models.FileField(
+        upload_to="submissions/%Y/%m/", blank=True, validators=UPLOAD_VALIDATORS
+    )
     score = models.FloatField(null=True, blank=True)
     submitted_at = models.DateTimeField(auto_now_add=True)
     graded_at = models.DateTimeField(null=True, blank=True)

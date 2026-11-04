@@ -5,6 +5,8 @@ and which class each student is in. Lessons hang off a class, subject and term.
 from django.conf import settings
 from django.db import models
 
+from .validators import UPLOAD_VALIDATORS
+
 
 class AcademicSession(models.Model):
     """A school year, e.g. 2025/2026. Its terms are created with it from the school's term names."""
@@ -156,7 +158,7 @@ class Enrollment(models.Model):
 class Lesson(models.Model):
     title = models.CharField(max_length=200)
     content = models.TextField(blank=True)
-    file = models.FileField(upload_to="lessons/%Y/%m/", blank=True)
+    file = models.FileField(upload_to="lessons/%Y/%m/", blank=True, validators=UPLOAD_VALIDATORS)
     classroom = models.ForeignKey(Classroom, on_delete=models.CASCADE, related_name="lessons")
     subject = models.ForeignKey(Subject, on_delete=models.PROTECT, related_name="lessons")
     term = models.ForeignKey(Term, on_delete=models.PROTECT, related_name="lessons")

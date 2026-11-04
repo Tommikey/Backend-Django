@@ -2,6 +2,7 @@ from django.contrib.auth.password_validation import validate_password
 from rest_framework import serializers
 
 from .access import SameSchoolSerializerMixin
+from .authentication import end_sessions
 from .models import Guardianship, User
 
 
@@ -51,9 +52,31 @@ class SchoolUserSerializer(serializers.ModelSerializer):
         validate_password(value)
         return value
 
+    def validate_username(self, value):
+        clash = User.objects.filter(username__iexact=value)
+        if self.instance is not None:
+            clash = clash.exclude(pk=self.instance.pk)
+        if clash.exists():
+            raise serializers.ValidationError("This username is taken.")
+        return value
+
     def validate(self, attrs):
-        if self.instance is None and not attrs.get("password"):
-            raise serializers.ValidationError({"password": "Required when creating a user."})
+        user = self.instance
+        if user is None:
+            if not attrs.get("password"):
+                raise serializers.ValidationError({"password": "Required when creating a user."})
+            return attrs
+        # a role decides what a user's records mean (a student's marks, a teacher's classes),
+        # so it is fixed at creation; make a new account for a different role
+        if "role" in attrs and attrs["role"] != user.role:
+            raise serializers.ValidationError(
+                {"role": "A role can't be changed; create a new account instead."}
+            )
+        # only active admins edit users, so refusing self-deactivation always leaves one
+        if attrs.get("is_active") is False and user == self.context["request"].user:
+            raise serializers.ValidationError(
+                {"is_active": "You can't deactivate your own account."}
+            )
         return attrs
 
     def create(self, validated_data):
@@ -62,10 +85,25 @@ class SchoolUserSerializer(serializers.ModelSerializer):
     def update(self, instance, validated_data):
         password = validated_data.pop("password", None)
         user = super().update(instance, validated_data)
-        if password:
+        if password:  # an admin reset: the person must sign in again everywhere
             user.set_password(password)
             user.save(update_fields=["password"])
+            end_sessions(user)
         return user
+
+
+class PasswordChangeSerializer(serializers.Serializer):
+    current_password = serializers.CharField(write_only=True, style={"input_type": "password"})
+    new_password = serializers.CharField(write_only=True, style={"input_type": "password"})
+
+    def validate_current_password(self, value):
+        if not self.context["request"].user.check_password(value):
+            raise serializers.ValidationError("That isn't your current password.")
+        return value
+
+    def validate(self, attrs):
+        validate_password(attrs["new_password"], self.context["request"].user)
+        return attrs
 
 
 class GuardianshipSerializer(SameSchoolSerializerMixin, serializers.ModelSerializer):

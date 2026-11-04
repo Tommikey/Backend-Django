@@ -16,3 +16,5 @@ ignore = ["DJ001"]
 [tool.pytest.ini_options]
 DJANGO_SETTINGS_MODULE = "config.settings"
 python_files = ["test_*.py"]
+# WhiteNoise expects collectstatic output, which tests don't need
+filterwarnings = ["ignore:No directory at:UserWarning"]

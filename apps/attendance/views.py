@@ -155,13 +155,19 @@ class StudentAttendanceView(APIView):
         student = data.get("student") or (user if user.role == User.Role.STUDENT else None)
         if student is None:
             raise NotFound("Say which student (?student=<id>).")
-        enrollment = enrollment_for(student, term.session)
-        # same readers as a published report card; anyone else learns nothing about the student
-        if enrollment is None or not can_read_published_card(user, student, enrollment.classroom):
-            raise NotFound("No attendance for this student and term.")
-        classroom = enrollment.classroom
-        summary = class_attendance(classroom, term, [student])[student.pk]
         marks = AttendanceRecord.objects.filter(student=student, term=term).order_by("date")
+        # the student's class: their enrollment, or, if they have since left it, the class
+        # their register was taken in
+        enrollment = enrollment_for(student, term.session)
+        if enrollment is not None:
+            classroom = enrollment.classroom
+        else:
+            last = marks.select_related("classroom__level").last()
+            classroom = last.classroom if last else None
+        # same readers as a published report card; anyone else learns nothing about the student
+        if classroom is None or not can_read_published_card(user, student, classroom):
+            raise NotFound("No attendance for this student and term.")
+        summary = class_attendance(classroom, term, [student])[student.pk]
         return Response(
             {
                 "student": student_ref(student),

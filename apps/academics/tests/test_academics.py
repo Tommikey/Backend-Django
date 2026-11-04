@@ -198,3 +198,32 @@ def test_teacher_of_another_subject_also_sees_the_class(auth, kit):
 def test_progress_without_a_session(auth, kit):
     AcademicSession.objects.update(is_current=False)
     assert auth(kit.student).get(PROGRESS_URL).json() == {"session": None, "classrooms": []}
+
+
+def test_lesson_files_are_checked(auth, kit, settings, tmp_path):
+    from django.core.files.uploadedfile import SimpleUploadedFile
+
+    settings.MEDIA_ROOT = tmp_path
+    bad = SimpleUploadedFile("notes.html", b"<script>alert(1)</script>", content_type="text/html")
+    r = auth(kit.teacher).post(LESSONS_URL, {**lesson_body(kit), "file": bad}, format="multipart")
+    assert r.status_code == 400 and "file" in r.json()
+    good = SimpleUploadedFile("notes.pdf", b"%PDF-1.7", content_type="application/pdf")
+    r = auth(kit.teacher).post(LESSONS_URL, {**lesson_body(kit), "file": good}, format="multipart")
+    assert r.status_code == 201, r.content
+
+
+@pytest.mark.parametrize(
+    "url",
+    [
+        "/api/v1/academics/lessons/?classroom=abc",
+        "/api/v1/academics/terms/?session=1;drop",
+        "/api/v1/academics/progress/?session=abc",
+        "/api/v1/academics/progress/?classroom=-1",
+        "/api/v1/assessments/?term=abc",
+        "/api/v1/submissions/?assessment=abc",
+        "/api/v1/live-classes/?subject=abc",
+    ],
+)
+def test_bad_id_filters_are_a_400(auth, admin_user, url):
+    r = auth(admin_user).get(url)
+    assert r.status_code == 400, (url, r.status_code)
