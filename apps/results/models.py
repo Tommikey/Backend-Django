@@ -82,6 +82,8 @@ class TermResult(models.Model):
     out_of = models.PositiveSmallIntegerField(null=True, blank=True)
     gpa = models.DecimalField(max_digits=3, decimal_places=2, null=True, blank=True)
     form_teacher_name = models.CharField(max_length=150, blank=True)
+    # {"days_open", "present", "late", "absent", "excused", "unmarked"}; null if no register
+    attendance = models.JSONField(null=True, blank=True)
     # written by people
     form_teacher_comment = models.TextField(blank=True)
     principal_comment = models.TextField(blank=True)

@@ -17,6 +17,7 @@ from apps.academics.models import (
 from apps.academics.services import create_session
 from apps.accounts.models import Guardianship, User
 from apps.assessments.models import Answer, Assessment, Choice, Question, Submission
+from apps.attendance.models import AttendanceRecord
 from apps.live_classes.models import LiveClass
 from apps.results.models import Score, TermResult
 from apps.schools.models import School
@@ -218,6 +219,34 @@ def build_school(slug, name, system, prefix):
         term=term,
         classroom=class_a,
         form_teacher_comment="A hardworking and attentive student.",
+    )
+
+    # two weeks of class A's register (school days before today): student2 misses two days,
+    # student3 is late once and has one excused absence
+    days, day = [], timezone.localdate()
+    while len(days) < 10:
+        day -= timedelta(days=1)
+        if day.weekday() < 5:
+            days.append(day)
+    Status = AttendanceRecord.Status
+    exceptions = {
+        (1, 2): (Status.ABSENT, ""),
+        (1, 6): (Status.ABSENT, ""),
+        (2, 4): (Status.LATE, ""),
+        (2, 8): (Status.EXCUSED, "Hospital appointment"),
+    }
+    AttendanceRecord.objects.bulk_create(
+        AttendanceRecord(
+            student=student,
+            classroom=class_a,
+            term=term,
+            date=day,
+            status=exceptions.get((i, d), (Status.PRESENT, ""))[0],
+            note=exceptions.get((i, d), (Status.PRESENT, ""))[1],
+            marked_by=teacher1,
+        )
+        for d, day in enumerate(days)
+        for i, student in enumerate(students[:3])
     )
 
     LiveClass.objects.create(

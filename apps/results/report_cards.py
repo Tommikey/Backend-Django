@@ -2,6 +2,8 @@
 live (draft) from current scores.
 """
 
+from apps.attendance.services import class_attendance, report_card_attendance
+
 from .models import TermResult
 from .services import compute_class_results, dec, grading_scale
 
@@ -59,6 +61,7 @@ def from_snapshot(result, publication):
                 result.out_of,
                 result.gpa,
             ),
+            "attendance": result.attendance,
             "comments": {
                 "form_teacher": result.form_teacher_comment,
                 "principal": result.principal_comment,
@@ -105,6 +108,9 @@ def live(student, classroom, term):
                 summary.get("position"),
                 summary.get("out_of"),
                 summary.get("gpa"),
+            ),
+            "attendance": report_card_attendance(
+                class_attendance(classroom, term, [student])[student.pk]
             ),
             "comments": {
                 "form_teacher": comments.form_teacher_comment if comments else "",
