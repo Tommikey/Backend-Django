@@ -5,52 +5,11 @@ every documented field is present, nothing undocumented appears, nulls only wher
 """
 
 import pytest
-from drf_spectacular.generators import SchemaGenerator
 
 from apps.accounts.models import Guardianship
+from conftest import check, response_schema
 
 pytestmark = pytest.mark.django_db
-
-
-@pytest.fixture(scope="module")
-def spec():
-    return SchemaGenerator().get_schema(request=None, public=True)
-
-
-def resolve(spec, schema):
-    while "$ref" in schema:
-        schema = spec["components"]["schemas"][schema["$ref"].split("/")[-1]]
-    if "allOf" in schema:  # a nullable $ref is wrapped as allOf + nullable
-        merged = resolve(spec, schema["allOf"][0])
-        return {**merged, "nullable": schema.get("nullable", False)}
-    return schema
-
-
-def check(spec, schema, value, where="$"):
-    schema = resolve(spec, schema)
-    if value is None:
-        assert schema.get("nullable"), f"{where} is null but not documented as nullable"
-        return
-    if "properties" in schema:
-        assert isinstance(value, dict), where
-        documented, actual = set(schema["properties"]), set(value)
-        assert actual == documented, (
-            f"{where}: undocumented {actual - documented}, missing {documented - actual}"
-        )
-        for key, sub in schema["properties"].items():
-            check(spec, sub, value[key], f"{where}.{key}")
-    elif schema.get("type") == "array":
-        assert isinstance(value, list), where
-        for i, item in enumerate(value[:3]):
-            check(spec, schema["items"], item, f"{where}[{i}]")
-    elif isinstance(schema.get("additionalProperties"), dict):
-        for key, item in value.items():
-            check(spec, schema["additionalProperties"], item, f"{where}[{key}]")
-
-
-def response_schema(spec, path, method, status):
-    op = spec["paths"][f"/api/v1/{path}"][method]
-    return op["responses"][str(status)]["content"]["application/json"]["schema"]
 
 
 @pytest.fixture

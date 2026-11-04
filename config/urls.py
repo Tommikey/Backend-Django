@@ -17,6 +17,7 @@ urlpatterns = [
     path("api/v1/", include("apps.live_classes.urls")),
     path("api/v1/", include("apps.results.urls")),
     path("api/v1/", include("apps.attendance.urls")),
+    path("api/v1/", include("apps.dashboard.urls")),
 ]
 
 if settings.DEBUG:

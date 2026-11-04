@@ -48,6 +48,7 @@ INSTALLED_APPS = [
     "apps.live_classes",
     "apps.results",
     "apps.attendance",
+    "apps.dashboard",
 ]
 
 MIDDLEWARE = [
