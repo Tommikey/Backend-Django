@@ -7,6 +7,7 @@ deactivating a user locks them out at once, not when their access token expires.
 
 from rest_framework.exceptions import AuthenticationFailed
 from rest_framework_simplejwt.authentication import JWTAuthentication as BaseJWTAuthentication
+from rest_framework_simplejwt.token_blacklist.models import BlacklistedToken, OutstandingToken
 
 
 def can_sign_in(user):
@@ -22,3 +23,10 @@ class JWTAuthentication(BaseJWTAuthentication):
         if not can_sign_in(user):
             raise AuthenticationFailed("This account or its school is not active.", code="inactive")
         return user
+
+
+def end_sessions(user):
+    """Retire every refresh token the user holds (access tokens already die with the
+    password hash they carry, see CHECK_REVOKE_TOKEN)."""
+    live = OutstandingToken.objects.filter(user=user, blacklistedtoken__isnull=True)
+    BlacklistedToken.objects.bulk_create(BlacklistedToken(token=token) for token in live)

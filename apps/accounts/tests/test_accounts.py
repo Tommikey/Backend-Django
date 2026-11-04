@@ -221,3 +221,76 @@ def test_onboarding_is_rate_limited(api):
     for _ in range(10):
         api.post("/api/v1/schools/onboard/", {})
     assert api.post("/api/v1/schools/onboard/", {}).status_code == 429
+
+
+# --- sessions --------------------------------------------------------------------------------
+
+TOKEN_URL = "/api/v1/auth/token/"
+REFRESH_URL = "/api/v1/auth/token/refresh/"
+NEW_PASSWORD = "Fresh-Start-2026!"
+
+
+def login(api, user, password=PASSWORD):
+    r = api.post(TOKEN_URL, {"username": user.username, "password": password})
+    assert r.status_code == 200, r.content
+    return r.json()
+
+
+def bearer(api, access):
+    api.credentials(HTTP_AUTHORIZATION=f"Bearer {access}")
+    return api
+
+
+def test_logout_retires_the_refresh_token(api, make_user):
+    tokens = login(api, make_user("student"))
+    assert api.post("/api/v1/auth/logout/", {"refresh": tokens["refresh"]}).status_code == 200
+    assert api.post(REFRESH_URL, {"refresh": tokens["refresh"]}).status_code == 401
+
+
+def test_refresh_rotates(api, make_user):
+    tokens = login(api, make_user("student"))
+    rotated = api.post(REFRESH_URL, {"refresh": tokens["refresh"]}).json()
+    assert rotated["refresh"] != tokens["refresh"]
+    assert api.post(REFRESH_URL, {"refresh": tokens["refresh"]}).status_code == 401  # used up
+
+
+def test_change_own_password_ends_other_sessions(api, make_user):
+    user = make_user("teacher")
+    phone = login(api, user)
+    laptop = login(api, user)
+
+    r = bearer(api, laptop["access"]).post(
+        "/api/v1/auth/password/",
+        {"current_password": PASSWORD, "new_password": NEW_PASSWORD},
+    )
+    assert r.status_code == 200, r.content
+    fresh = r.json()
+
+    assert bearer(api, phone["access"]).get("/api/v1/auth/me/").status_code == 401
+    api.credentials()
+    assert api.post(REFRESH_URL, {"refresh": phone["refresh"]}).status_code == 401
+    assert bearer(api, fresh["access"]).get("/api/v1/auth/me/").status_code == 200
+    api.credentials()
+    login(api, user, NEW_PASSWORD)
+
+
+def test_password_change_checks(api, make_user):
+    user = make_user("student")
+    client = bearer(api, login(api, user)["access"])
+    url = "/api/v1/auth/password/"
+    wrong = client.post(url, {"current_password": "nope", "new_password": NEW_PASSWORD})
+    assert wrong.status_code == 400 and "current_password" in wrong.json()
+    weak = client.post(url, {"current_password": PASSWORD, "new_password": "12345678"})
+    assert weak.status_code == 400
+    api.credentials()
+    assert api.post(url, {}).status_code == 401
+
+
+def test_admin_reset_ends_the_users_sessions(api, auth, admin_user, make_user):
+    student = make_user("student")
+    tokens = login(api, student)
+    r = auth(admin_user).patch(f"{USERS_URL}{student.pk}/", {"password": NEW_PASSWORD})
+    assert r.status_code == 200
+    assert bearer(api, tokens["access"]).get("/api/v1/auth/me/").status_code == 401
+    api.credentials()
+    assert api.post(REFRESH_URL, {"refresh": tokens["refresh"]}).status_code == 401

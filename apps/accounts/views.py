@@ -1,12 +1,21 @@
 from rest_framework import generics, viewsets
 from rest_framework.exceptions import ValidationError
+from rest_framework.response import Response
 from rest_framework.throttling import ScopedRateThrottle
-from rest_framework_simplejwt.views import TokenObtainPairView
+from rest_framework.views import APIView
+from rest_framework_simplejwt.tokens import RefreshToken
+from rest_framework_simplejwt.views import TokenBlacklistView, TokenObtainPairView
 
 from .access import InUse, RolePermissionsMixin, SchoolScopedMixin
+from .authentication import end_sessions
 from .models import Guardianship, User
 from .permissions import IsAdmin, IsTeacherOrAdmin
-from .serializers import GuardianshipSerializer, SchoolUserSerializer, UserSerializer
+from .serializers import (
+    GuardianshipSerializer,
+    PasswordChangeSerializer,
+    SchoolUserSerializer,
+    UserSerializer,
+)
 from .throttles import LoginUsernameThrottle
 
 
@@ -15,6 +24,29 @@ class LoginView(TokenObtainPairView):
 
     throttle_classes = [ScopedRateThrottle, LoginUsernameThrottle]
     throttle_scope = "login"
+
+
+class LogoutView(TokenBlacklistView):
+    """POST {refresh}: retire this device's refresh token. Its access token runs out on its own
+    (at most an hour); the client should drop both."""
+
+
+class PasswordChangeView(APIView):
+    """POST {current_password, new_password}: change your own password. Every other session
+    ends; the response carries fresh tokens so this device stays signed in."""
+
+    throttle_classes = [ScopedRateThrottle]
+    throttle_scope = "password"
+
+    def post(self, request):
+        serializer = PasswordChangeSerializer(data=request.data, context={"request": request})
+        serializer.is_valid(raise_exception=True)
+        user = request.user
+        user.set_password(serializer.validated_data["new_password"])
+        user.save(update_fields=["password"])
+        end_sessions(user)
+        refresh = RefreshToken.for_user(user)
+        return Response({"access": str(refresh.access_token), "refresh": str(refresh)})
 
 
 class MeView(generics.RetrieveUpdateAPIView):

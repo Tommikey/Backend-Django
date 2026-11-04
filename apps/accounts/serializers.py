@@ -2,6 +2,7 @@ from django.contrib.auth.password_validation import validate_password
 from rest_framework import serializers
 
 from .access import SameSchoolSerializerMixin
+from .authentication import end_sessions
 from .models import Guardianship, User
 
 
@@ -84,10 +85,25 @@ class SchoolUserSerializer(serializers.ModelSerializer):
     def update(self, instance, validated_data):
         password = validated_data.pop("password", None)
         user = super().update(instance, validated_data)
-        if password:
+        if password:  # an admin reset: the person must sign in again everywhere
             user.set_password(password)
             user.save(update_fields=["password"])
+            end_sessions(user)
         return user
+
+
+class PasswordChangeSerializer(serializers.Serializer):
+    current_password = serializers.CharField(write_only=True, style={"input_type": "password"})
+    new_password = serializers.CharField(write_only=True, style={"input_type": "password"})
+
+    def validate_current_password(self, value):
+        if not self.context["request"].user.check_password(value):
+            raise serializers.ValidationError("That isn't your current password.")
+        return value
+
+    def validate(self, attrs):
+        validate_password(attrs["new_password"], self.context["request"].user)
+        return attrs
 
 
 class GuardianshipSerializer(SameSchoolSerializerMixin, serializers.ModelSerializer):

@@ -1,7 +1,14 @@
 from django.urls import path
 from rest_framework.routers import DefaultRouter
 
-from .views import GuardianshipViewSet, LoginView, MeView, UserViewSet
+from .views import (
+    GuardianshipViewSet,
+    LoginView,
+    LogoutView,
+    MeView,
+    PasswordChangeView,
+    UserViewSet,
+)
 
 app_name = "accounts"
 
@@ -11,5 +18,7 @@ router.register("guardianships", GuardianshipViewSet, basename="guardianship")
 
 urlpatterns = router.urls + [
     path("auth/token/", LoginView.as_view(), name="token_obtain_pair"),
+    path("auth/logout/", LogoutView.as_view(), name="logout"),
+    path("auth/password/", PasswordChangeView.as_view(), name="password"),
     path("auth/me/", MeView.as_view(), name="me"),
 ]

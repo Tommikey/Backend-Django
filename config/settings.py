@@ -37,6 +37,7 @@ INSTALLED_APPS = [
     # third-party
     "rest_framework",
     "rest_framework_simplejwt",
+    "rest_framework_simplejwt.token_blacklist",
     "corsheaders",
     # local
     "apps.schools",
@@ -105,6 +106,7 @@ REST_FRAMEWORK = {
         "login": "60/min",  # per IP: generous, a school lab often shares one IP
         "login_user": "10/min",  # per username: password guessing
         "onboard": "10/hour",  # per IP: new schools
+        "password": "10/hour",  # per user: guessing the current password with a stolen token
     },
     # proxies in front of the app (1 behind a load balancer), so client IPs come from the
     # right X-Forwarded-For entry; 0 trusts only the socket address
@@ -116,6 +118,11 @@ SIMPLE_JWT = {
     "REFRESH_TOKEN_LIFETIME": timedelta(days=7),
     # login and refresh: active user of an active school (see apps/accounts/authentication.py)
     "USER_AUTHENTICATION_RULE": "apps.accounts.authentication.can_sign_in",
+    # each refresh hands out a new refresh token and retires the old one (logout = blacklist)
+    "ROTATE_REFRESH_TOKENS": True,
+    "BLACKLIST_AFTER_ROTATION": True,
+    # tokens carry a hash of the password: changing it ends every existing session
+    "CHECK_REVOKE_TOKEN": True,
 }
 
 CORS_ALLOW_ALL_ORIGINS = env("CORS_ALLOW_ALL_ORIGINS")
