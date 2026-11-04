@@ -19,6 +19,7 @@ env = environ.Env(
     SECURE_SSL_REDIRECT=(bool, True),
     SECURE_HSTS_SECONDS=(int, 60 * 60 * 24 * 30),
     LOG_LEVEL=(str, "INFO"),
+    NUM_PROXIES=(int, 0),
 )
 environ.Env.read_env(BASE_DIR / ".env")
 
@@ -94,6 +95,20 @@ REST_FRAMEWORK = {
     "DEFAULT_PERMISSION_CLASSES": ("rest_framework.permissions.IsAuthenticated",),
     "DEFAULT_PAGINATION_CLASS": "rest_framework.pagination.PageNumberPagination",
     "PAGE_SIZE": 50,
+    "DEFAULT_THROTTLE_CLASSES": (
+        "rest_framework.throttling.AnonRateThrottle",
+        "rest_framework.throttling.UserRateThrottle",
+    ),
+    "DEFAULT_THROTTLE_RATES": {
+        "anon": "60/min",
+        "user": "600/min",
+        "login": "60/min",  # per IP: generous, a school lab often shares one IP
+        "login_user": "10/min",  # per username: password guessing
+        "onboard": "10/hour",  # per IP: new schools
+    },
+    # proxies in front of the app (1 behind a load balancer), so client IPs come from the
+    # right X-Forwarded-For entry; 0 trusts only the socket address
+    "NUM_PROXIES": env("NUM_PROXIES"),
 }
 
 SIMPLE_JWT = {

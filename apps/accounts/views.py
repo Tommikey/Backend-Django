@@ -1,10 +1,20 @@
 from rest_framework import generics, viewsets
 from rest_framework.exceptions import ValidationError
+from rest_framework.throttling import ScopedRateThrottle
+from rest_framework_simplejwt.views import TokenObtainPairView
 
 from .access import InUse, RolePermissionsMixin, SchoolScopedMixin
 from .models import Guardianship, User
 from .permissions import IsAdmin, IsTeacherOrAdmin
 from .serializers import GuardianshipSerializer, SchoolUserSerializer, UserSerializer
+from .throttles import LoginUsernameThrottle
+
+
+class LoginView(TokenObtainPairView):
+    """POST {username, password} -> {access, refresh}. Rate-limited per username and per IP."""
+
+    throttle_classes = [ScopedRateThrottle, LoginUsernameThrottle]
+    throttle_scope = "login"
 
 
 class MeView(generics.RetrieveUpdateAPIView):

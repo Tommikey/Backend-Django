@@ -3,6 +3,7 @@ from django.http import Http404
 from rest_framework import generics, status, viewsets
 from rest_framework.permissions import AllowAny, IsAuthenticated
 from rest_framework.response import Response
+from rest_framework.throttling import ScopedRateThrottle
 from rest_framework.views import APIView
 
 from apps.accounts.access import InUse, RolePermissionsMixin, SafeDestroyMixin, SchoolScopedMixin
@@ -28,6 +29,8 @@ class OnboardView(APIView):
 
     permission_classes = [AllowAny]
     authentication_classes = []
+    throttle_classes = [ScopedRateThrottle]
+    throttle_scope = "onboard"
 
     def post(self, request):
         serializer = OnboardSerializer(data=request.data)

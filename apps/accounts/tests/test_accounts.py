@@ -204,3 +204,20 @@ def test_suspended_school_is_locked_out(api, auth, make_user, school):
     assert login.status_code == 401
     refresh = api.post("/api/v1/auth/token/refresh/", {"refresh": tokens["refresh"]})
     assert refresh.status_code == 401
+
+
+def test_login_is_rate_limited_per_username(api, make_user):
+    user = make_user("student")
+    for _ in range(10):
+        api.post("/api/v1/auth/token/", {"username": user.username, "password": "wrong"})
+    r = api.post("/api/v1/auth/token/", {"username": user.username.upper(), "password": PASSWORD})
+    assert r.status_code == 429  # even the right password, until the window passes
+    other = make_user("student")
+    r = api.post("/api/v1/auth/token/", {"username": other.username, "password": PASSWORD})
+    assert r.status_code == 200  # a classmate on the same IP is unaffected
+
+
+def test_onboarding_is_rate_limited(api):
+    for _ in range(10):
+        api.post("/api/v1/schools/onboard/", {})
+    assert api.post("/api/v1/schools/onboard/", {}).status_code == 429
