@@ -18,6 +18,7 @@ from django.db import transaction
 
 from apps.academics.models import Enrollment, Term
 from apps.accounts.models import User
+from apps.attendance.services import class_attendance, report_card_attendance
 
 from .models import Publication, Score, SubjectResult, TermResult
 
@@ -157,7 +158,9 @@ def publish_term(term, user):
     school = term.session.school
     for classroom in classrooms_in_session(school, term.session):
         form_teacher = classroom.form_teacher.display_name if classroom.form_teacher else ""
-        for row in compute_class_results(classroom, term)["students"]:
+        rows = compute_class_results(classroom, term)["students"]
+        attendance = class_attendance(classroom, term, [row["student"] for row in rows])
+        for row in rows:
             summary = row["summary"]
             result, _ = TermResult.objects.update_or_create(
                 student=row["student"],
@@ -171,6 +174,7 @@ def publish_term(term, user):
                     "out_of": summary["out_of"],
                     "gpa": summary["gpa"],
                     "form_teacher_name": form_teacher,
+                    "attendance": report_card_attendance(attendance[row["student"].pk]),
                 },
             )
             result.subject_results.all().delete()
@@ -222,11 +226,20 @@ def grading_scale(school):
 
 @transaction.atomic
 def unpublish_term(term):
-    """Reopen a term for corrections: hide report cards, unlock scores, keep comments."""
+    """Reopen a term for corrections: hide report cards, unlock scores and attendance, keep
+    comments."""
     Publication.objects.filter(term=term).delete()
     results = TermResult.objects.filter(term=term)
     SubjectResult.objects.filter(term_result__in=results).delete()
-    results.update(total=None, average=None, subjects_count=0, position=None, out_of=None, gpa=None)
+    results.update(
+        total=None,
+        average=None,
+        subjects_count=0,
+        position=None,
+        out_of=None,
+        gpa=None,
+        attendance=None,
+    )
 
 
 def lock_term(term):

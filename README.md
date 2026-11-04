@@ -21,6 +21,7 @@ Built with Django 5.2, Django REST Framework, JWT auth (SimpleJWT) and PostgreSQ
 | **Learning** | Lessons per class, subject and term, with completion tracking and progress reports |
 | **Assessments** | Quizzes (auto-graded multiple choice) and assignments (graded by the teacher), with submissions |
 | **Live classes** | Scheduled online sessions for a class and subject, with a join link |
+| **Attendance** | A daily class register taken by the form teacher (present, late, absent, excused), term summaries per class and per student, attendance printed on report cards |
 | **Results** | Score sheets per class and subject, form teacher and principal comments, class broadsheet, publishing a term into fixed report cards (with positions or GPA where the school uses them) |
 
 ### Who sees what
@@ -28,9 +29,9 @@ Built with Django 5.2, Django REST Framework, JWT auth (SimpleJWT) and PostgreSQ
 - **Admins** run their school: people, the school year, settings, and publishing results.
 - **Teachers** work on the classes and subjects they're assigned: lessons, assessments, live
   classes and scores. A class's **form teacher** also sees that class's broadsheet and writes its
-  report card comments.
-- **Students** see their own classes, work and published report cards.
-- **Parents** see their linked children and their published report cards.
+  report card comments, and takes its daily register.
+- **Students** see their own classes, work, attendance and published report cards.
+- **Parents** see their linked children, their attendance and their published report cards.
 - **Schools are isolated.** Another school's data behaves as if it doesn't exist; IDs from other
   schools are rejected as unknown, not forbidden.
 - **Platform staff** (superusers) use the Django admin only and belong to no school.
@@ -42,6 +43,14 @@ form teacher can preview live draft report cards. Publishing snapshots every rep
 grades, class averages, positions or GPA, and the grade scale in force — and locks scores and
 comments, so a published card never changes if the school edits its settings later. An admin can
 unpublish a term to make corrections.
+
+### Attendance in brief
+
+The form teacher (or an admin) takes the class register once per school day, marking each student
+present, late, absent or excused, with an optional note. A day counts as a day the school opened for
+that class once its register has been taken. Late counts as present, and excused absences are counted
+separately from other absences. Report cards print the term's attendance. Publishing snapshots it and
+locks the register along with the scores, and unpublishing reopens both.
 
 ## Getting started
 
@@ -72,7 +81,7 @@ The API is at `http://localhost:8000/api/v1/` and the Django admin at `http://lo
 ### Demo accounts
 
 `seed` creates three demo schools, one per system, each with a running school year, classes,
-lessons, assessments, a live class and term scores (not yet published). Every password is
+lessons, assessments, a live class, two weeks of attendance and term scores (not yet published). Every password is
 `pass1234`.
 
 | School | System | Usernames |
@@ -112,6 +121,7 @@ All routes are under `/api/v1/`:
 | Assessments | `assessments/`, `submissions/` |
 | Live classes | `live-classes/` |
 | Results | `results/score-sheet/`, `results/comments/`, `results/class-results/`, `results/report-card/`, `results/publish/`, `results/unpublish/` |
+| Attendance | `attendance/register/`, `attendance/summary/`, `attendance/student/` |
 
 ## Project layout
 
@@ -124,6 +134,7 @@ apps/
   assessments/     quizzes, assignments, submissions, grading
   live_classes/    scheduled online classes
   results/         scores, comments, results maths, publishing, report cards
+  attendance/      daily class register, term attendance counts
 conftest.py        shared pytest fixtures
 ```
 
