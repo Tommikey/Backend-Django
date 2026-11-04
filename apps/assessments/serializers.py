@@ -1,6 +1,7 @@
 from rest_framework import serializers
 
 from apps.academics.serializers import TeachingScopeSerializerMixin, term_field
+from apps.academics.validators import UPLOAD_VALIDATORS
 from apps.accounts.access import SameSchoolSerializerMixin
 
 from .models import Answer, Assessment, Choice, Question, Submission
@@ -116,7 +117,7 @@ class AnswerInputSerializer(serializers.Serializer):
 class SubmitSerializer(serializers.Serializer):
     answers = AnswerInputSerializer(many=True, required=False)
     text = serializers.CharField(required=False, allow_blank=True)
-    file = serializers.FileField(required=False)
+    file = serializers.FileField(required=False, validators=UPLOAD_VALIDATORS)
 
     def validate(self, attrs):
         assessment = self.context["assessment"]

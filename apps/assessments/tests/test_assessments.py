@@ -217,3 +217,26 @@ def test_assessments_filter_by_classroom(auth, kit):
     make_assignment(kit, "B work", classroom=other_class)
     rows = results(auth(kit.teacher).get(f"{ASSESSMENTS_URL}?classroom={other_class.pk}").json())
     assert [a["title"] for a in rows] == ["B work"]
+
+
+# --- uploads ---------------------------------------------------------------------------------
+
+
+def test_submission_files_are_checked(auth, kit, settings, tmp_path):
+    from django.core.files.uploadedfile import SimpleUploadedFile
+
+    settings.MEDIA_ROOT = tmp_path
+    essay = make_assignment(kit)
+    url = f"{ASSESSMENTS_URL}{essay.pk}/submit/"
+    client = auth(kit.student)
+
+    script = SimpleUploadedFile("essay.exe", b"MZ...", content_type="application/octet-stream")
+    r = client.post(url, {"file": script}, format="multipart")
+    assert r.status_code == 400 and "file" in r.json()
+
+    huge = SimpleUploadedFile("essay.pdf", b"0" * (10 * 1024 * 1024 + 1))
+    r = client.post(url, {"file": huge}, format="multipart")
+    assert r.status_code == 400 and "10 MB" in str(r.json())
+
+    ok = SimpleUploadedFile("essay.pdf", b"%PDF-1.7 ...", content_type="application/pdf")
+    assert client.post(url, {"file": ok}, format="multipart").status_code == 201

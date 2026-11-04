@@ -198,3 +198,15 @@ def test_teacher_of_another_subject_also_sees_the_class(auth, kit):
 def test_progress_without_a_session(auth, kit):
     AcademicSession.objects.update(is_current=False)
     assert auth(kit.student).get(PROGRESS_URL).json() == {"session": None, "classrooms": []}
+
+
+def test_lesson_files_are_checked(auth, kit, settings, tmp_path):
+    from django.core.files.uploadedfile import SimpleUploadedFile
+
+    settings.MEDIA_ROOT = tmp_path
+    bad = SimpleUploadedFile("notes.html", b"<script>alert(1)</script>", content_type="text/html")
+    r = auth(kit.teacher).post(LESSONS_URL, {**lesson_body(kit), "file": bad}, format="multipart")
+    assert r.status_code == 400 and "file" in r.json()
+    good = SimpleUploadedFile("notes.pdf", b"%PDF-1.7", content_type="application/pdf")
+    r = auth(kit.teacher).post(LESSONS_URL, {**lesson_body(kit), "file": good}, format="multipart")
+    assert r.status_code == 201, r.content
