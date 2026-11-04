@@ -153,6 +153,7 @@ if not DEBUG:
     # deployed behind a TLS-terminating proxy that sets X-Forwarded-Proto
     SECURE_PROXY_SSL_HEADER = ("HTTP_X_FORWARDED_PROTO", "https")
     SECURE_SSL_REDIRECT = env("SECURE_SSL_REDIRECT")
+    SECURE_REDIRECT_EXEMPT = [r"^healthz/$"]  # load balancers probe over plain HTTP
     SECURE_HSTS_SECONDS = env("SECURE_HSTS_SECONDS")
     SECURE_HSTS_INCLUDE_SUBDOMAINS = True
     SESSION_COOKIE_SECURE = True
