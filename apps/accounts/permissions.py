@@ -23,4 +23,3 @@ class IsStudent(RolePermission):
 
 class IsTeacherOrAdmin(RolePermission):
     allowed_roles = frozenset({"teacher", "admin"})
-

@@ -165,9 +165,9 @@ class EnrollmentViewSet(
     """Which class each student is in, per session (one class per session)."""
 
     serializer_class = EnrollmentSerializer
-    queryset = Enrollment.objects.select_related(
-        "session", "classroom__level", "student"
-    ).order_by("-created_at")
+    queryset = Enrollment.objects.select_related("session", "classroom__level", "student").order_by(
+        "-created_at"
+    )
     school_path = "classroom__school"
     write_permissions = (IsAdmin,)
 
@@ -247,8 +247,7 @@ class ProgressView(APIView):
             classrooms = classrooms.filter(pk=classroom_id)
 
         data = [
-            self.classroom_progress(classroom, session, user)
-            for classroom in classrooms.distinct()
+            self.classroom_progress(classroom, session, user) for classroom in classrooms.distinct()
         ]
         return Response({"session": {"id": session.pk, "name": session.name}, "classrooms": data})
 
@@ -257,13 +256,12 @@ class ProgressView(APIView):
         in_session = {"classroom": classroom, "term__session": session}
         lessons = Lesson.objects.filter(**in_session)
         completions = Completion.objects.filter(
-            lesson__in=lessons, student__enrollments__classroom=classroom,
+            lesson__in=lessons,
+            student__enrollments__classroom=classroom,
             student__enrollments__session=session,
         )
         quizzes = Assessment.objects.filter(**in_session, type=Assessment.Type.QUIZ)
-        submissions = Submission.objects.filter(assessment__in=quizzes).select_related(
-            "assessment"
-        )
+        submissions = Submission.objects.filter(assessment__in=quizzes).select_related("assessment")
         if user.role == "student":
             completions = completions.filter(student=user)
             submissions = submissions.filter(student=user)

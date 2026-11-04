@@ -76,9 +76,7 @@ class TeachingScopeSerializerMixin:
 
         classroom, subject, term = value("classroom"), value("subject"), value("term")
         if not teaches(user, classroom.pk, subject.pk, term.session_id):
-            raise PermissionDenied(
-                f"You don't teach {subject} to {classroom} in {term.session}."
-            )
+            raise PermissionDenied(f"You don't teach {subject} to {classroom} in {term.session}.")
         return attrs
 
 

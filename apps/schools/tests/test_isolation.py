@@ -121,7 +121,11 @@ def test_cannot_set_up_with_another_schools_records(auth, admin_user, kit, their
     assert r.status_code == 400 and "teacher" in r.json()
     r = client.post(
         "/api/v1/academics/enrollments/",
-        {"classroom": kit.classroom.pk, "student": kit.outsider.pk, "session": theirs["session"].pk},
+        {
+            "classroom": kit.classroom.pk,
+            "student": kit.outsider.pk,
+            "session": theirs["session"].pk,
+        },
     )
     assert r.status_code == 400 and "session" in r.json()
     r = client.post("/api/v1/academics/classrooms/", {"level": theirs["classroom"].level_id})

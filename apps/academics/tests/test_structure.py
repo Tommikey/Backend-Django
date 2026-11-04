@@ -70,9 +70,7 @@ def test_current_term_filter_and_rename(auth, admin_user, term):
 
 
 def test_session_with_content_cannot_be_deleted(auth, admin_user, kit):
-    Lesson.objects.create(
-        title="L", classroom=kit.classroom, subject=kit.subject, term=kit.term
-    )
+    Lesson.objects.create(title="L", classroom=kit.classroom, subject=kit.subject, term=kit.term)
     r = auth(admin_user).delete(f"{SESSIONS_URL}{kit.session.pk}/")
     assert r.status_code == 409
     assert AcademicSession.objects.filter(pk=kit.session.pk).exists()
@@ -202,4 +200,6 @@ def test_without_a_current_session_a_session_must_be_given(auth, admin_user, kit
 
 def test_subject_in_use_cannot_be_deleted(auth, admin_user, kit):
     Lesson.objects.create(title="L", classroom=kit.classroom, subject=kit.subject, term=kit.term)
-    assert auth(admin_user).delete(f"/api/v1/academics/subjects/{kit.subject.pk}/").status_code == 409
+    assert (
+        auth(admin_user).delete(f"/api/v1/academics/subjects/{kit.subject.pk}/").status_code == 409
+    )

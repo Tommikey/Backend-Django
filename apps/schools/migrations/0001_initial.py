@@ -5,67 +5,134 @@ from django.db import migrations, models
 
 
 class Migration(migrations.Migration):
-
     initial = True
 
-    dependencies = [
-    ]
+    dependencies = []
 
     operations = [
         migrations.CreateModel(
-            name='School',
+            name="School",
             fields=[
-                ('id', models.BigAutoField(auto_created=True, primary_key=True, serialize=False, verbose_name='ID')),
-                ('name', models.CharField(max_length=200)),
-                ('slug', models.SlugField(max_length=80, unique=True)),
-                ('system', models.CharField(choices=[('ng', 'Nigerian (JSS/SSS)'), ('uk', 'British (Year 7-13)'), ('us', 'US (Grade 6-12)')], max_length=2)),
-                ('show_position', models.BooleanField(default=False)),
-                ('use_gpa', models.BooleanField(default=False)),
-                ('term_labels', models.JSONField(default=list)),
-                ('is_active', models.BooleanField(default=True)),
-                ('created_at', models.DateTimeField(auto_now_add=True)),
+                (
+                    "id",
+                    models.BigAutoField(
+                        auto_created=True, primary_key=True, serialize=False, verbose_name="ID"
+                    ),
+                ),
+                ("name", models.CharField(max_length=200)),
+                ("slug", models.SlugField(max_length=80, unique=True)),
+                (
+                    "system",
+                    models.CharField(
+                        choices=[
+                            ("ng", "Nigerian (JSS/SSS)"),
+                            ("uk", "British (Year 7-13)"),
+                            ("us", "US (Grade 6-12)"),
+                        ],
+                        max_length=2,
+                    ),
+                ),
+                ("show_position", models.BooleanField(default=False)),
+                ("use_gpa", models.BooleanField(default=False)),
+                ("term_labels", models.JSONField(default=list)),
+                ("is_active", models.BooleanField(default=True)),
+                ("created_at", models.DateTimeField(auto_now_add=True)),
             ],
         ),
         migrations.CreateModel(
-            name='Level',
+            name="Level",
             fields=[
-                ('id', models.BigAutoField(auto_created=True, primary_key=True, serialize=False, verbose_name='ID')),
-                ('name', models.CharField(max_length=50)),
-                ('order', models.PositiveSmallIntegerField()),
-                ('school', models.ForeignKey(on_delete=django.db.models.deletion.CASCADE, related_name='levels', to='schools.school')),
+                (
+                    "id",
+                    models.BigAutoField(
+                        auto_created=True, primary_key=True, serialize=False, verbose_name="ID"
+                    ),
+                ),
+                ("name", models.CharField(max_length=50)),
+                ("order", models.PositiveSmallIntegerField()),
+                (
+                    "school",
+                    models.ForeignKey(
+                        on_delete=django.db.models.deletion.CASCADE,
+                        related_name="levels",
+                        to="schools.school",
+                    ),
+                ),
             ],
             options={
-                'ordering': ['order'],
-                'constraints': [models.UniqueConstraint(fields=('school', 'name'), name='unique_school_level_name')],
+                "ordering": ["order"],
+                "constraints": [
+                    models.UniqueConstraint(
+                        fields=("school", "name"), name="unique_school_level_name"
+                    )
+                ],
             },
         ),
         migrations.CreateModel(
-            name='GradeBand',
+            name="GradeBand",
             fields=[
-                ('id', models.BigAutoField(auto_created=True, primary_key=True, serialize=False, verbose_name='ID')),
-                ('label', models.CharField(max_length=10)),
-                ('min_score', models.DecimalField(decimal_places=2, max_digits=5)),
-                ('remark', models.CharField(blank=True, max_length=50)),
-                ('grade_point', models.DecimalField(blank=True, decimal_places=2, max_digits=3, null=True)),
-                ('school', models.ForeignKey(on_delete=django.db.models.deletion.CASCADE, related_name='grade_bands', to='schools.school')),
+                (
+                    "id",
+                    models.BigAutoField(
+                        auto_created=True, primary_key=True, serialize=False, verbose_name="ID"
+                    ),
+                ),
+                ("label", models.CharField(max_length=10)),
+                ("min_score", models.DecimalField(decimal_places=2, max_digits=5)),
+                ("remark", models.CharField(blank=True, max_length=50)),
+                (
+                    "grade_point",
+                    models.DecimalField(blank=True, decimal_places=2, max_digits=3, null=True),
+                ),
+                (
+                    "school",
+                    models.ForeignKey(
+                        on_delete=django.db.models.deletion.CASCADE,
+                        related_name="grade_bands",
+                        to="schools.school",
+                    ),
+                ),
             ],
             options={
-                'ordering': ['-min_score'],
-                'constraints': [models.UniqueConstraint(fields=('school', 'label'), name='unique_school_grade_label'), models.UniqueConstraint(fields=('school', 'min_score'), name='unique_school_grade_min')],
+                "ordering": ["-min_score"],
+                "constraints": [
+                    models.UniqueConstraint(
+                        fields=("school", "label"), name="unique_school_grade_label"
+                    ),
+                    models.UniqueConstraint(
+                        fields=("school", "min_score"), name="unique_school_grade_min"
+                    ),
+                ],
             },
         ),
         migrations.CreateModel(
-            name='AssessmentComponent',
+            name="AssessmentComponent",
             fields=[
-                ('id', models.BigAutoField(auto_created=True, primary_key=True, serialize=False, verbose_name='ID')),
-                ('name', models.CharField(max_length=50)),
-                ('max_score', models.PositiveSmallIntegerField()),
-                ('order', models.PositiveSmallIntegerField()),
-                ('school', models.ForeignKey(on_delete=django.db.models.deletion.CASCADE, related_name='components', to='schools.school')),
+                (
+                    "id",
+                    models.BigAutoField(
+                        auto_created=True, primary_key=True, serialize=False, verbose_name="ID"
+                    ),
+                ),
+                ("name", models.CharField(max_length=50)),
+                ("max_score", models.PositiveSmallIntegerField()),
+                ("order", models.PositiveSmallIntegerField()),
+                (
+                    "school",
+                    models.ForeignKey(
+                        on_delete=django.db.models.deletion.CASCADE,
+                        related_name="components",
+                        to="schools.school",
+                    ),
+                ),
             ],
             options={
-                'ordering': ['order'],
-                'constraints': [models.UniqueConstraint(fields=('school', 'name'), name='unique_school_component')],
+                "ordering": ["order"],
+                "constraints": [
+                    models.UniqueConstraint(
+                        fields=("school", "name"), name="unique_school_component"
+                    )
+                ],
             },
         ),
     ]

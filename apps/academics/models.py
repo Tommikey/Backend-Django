@@ -100,7 +100,7 @@ class Classroom(models.Model):
 
 
 class TeachingAssignment(models.Model):
-    """"This teacher teaches this subject to this class this session." The basis of what
+    """ "This teacher teaches this subject to this class this session." The basis of what
     teachers may post and grade.
     """
 

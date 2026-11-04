@@ -10,8 +10,7 @@ def create_session(school, name, starts_on=None, ends_on=None, make_current=Fals
         school=school, name=name, starts_on=starts_on, ends_on=ends_on
     )
     Term.objects.bulk_create(
-        Term(session=session, name=label, order=i)
-        for i, label in enumerate(school.term_labels, 1)
+        Term(session=session, name=label, order=i) for i, label in enumerate(school.term_labels, 1)
     )
     if make_current:
         make_term_current(session.terms.order_by("order").first())

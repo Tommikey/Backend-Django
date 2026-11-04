@@ -6,29 +6,62 @@ from django.db import migrations, models
 
 
 class Migration(migrations.Migration):
-
     initial = True
 
     dependencies = [
-        ('academics', '0002_initial'),
+        ("academics", "0002_initial"),
         migrations.swappable_dependency(settings.AUTH_USER_MODEL),
     ]
 
     operations = [
         migrations.CreateModel(
-            name='LiveClass',
+            name="LiveClass",
             fields=[
-                ('id', models.BigAutoField(auto_created=True, primary_key=True, serialize=False, verbose_name='ID')),
-                ('title', models.CharField(max_length=200)),
-                ('description', models.TextField(blank=True)),
-                ('starts_at', models.DateTimeField()),
-                ('ends_at', models.DateTimeField(blank=True, null=True)),
-                ('join_url', models.URLField()),
-                ('created_at', models.DateTimeField(auto_now_add=True)),
-                ('classroom', models.ForeignKey(on_delete=django.db.models.deletion.CASCADE, related_name='live_classes', to='academics.classroom')),
-                ('hosted_by', models.ForeignKey(null=True, on_delete=django.db.models.deletion.SET_NULL, related_name='live_classes_hosted', to=settings.AUTH_USER_MODEL)),
-                ('subject', models.ForeignKey(on_delete=django.db.models.deletion.PROTECT, related_name='live_classes', to='academics.subject')),
-                ('term', models.ForeignKey(on_delete=django.db.models.deletion.PROTECT, related_name='live_classes', to='academics.term')),
+                (
+                    "id",
+                    models.BigAutoField(
+                        auto_created=True, primary_key=True, serialize=False, verbose_name="ID"
+                    ),
+                ),
+                ("title", models.CharField(max_length=200)),
+                ("description", models.TextField(blank=True)),
+                ("starts_at", models.DateTimeField()),
+                ("ends_at", models.DateTimeField(blank=True, null=True)),
+                ("join_url", models.URLField()),
+                ("created_at", models.DateTimeField(auto_now_add=True)),
+                (
+                    "classroom",
+                    models.ForeignKey(
+                        on_delete=django.db.models.deletion.CASCADE,
+                        related_name="live_classes",
+                        to="academics.classroom",
+                    ),
+                ),
+                (
+                    "hosted_by",
+                    models.ForeignKey(
+                        null=True,
+                        on_delete=django.db.models.deletion.SET_NULL,
+                        related_name="live_classes_hosted",
+                        to=settings.AUTH_USER_MODEL,
+                    ),
+                ),
+                (
+                    "subject",
+                    models.ForeignKey(
+                        on_delete=django.db.models.deletion.PROTECT,
+                        related_name="live_classes",
+                        to="academics.subject",
+                    ),
+                ),
+                (
+                    "term",
+                    models.ForeignKey(
+                        on_delete=django.db.models.deletion.PROTECT,
+                        related_name="live_classes",
+                        to="academics.term",
+                    ),
+                ),
             ],
         ),
     ]

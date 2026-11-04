@@ -9,9 +9,7 @@ class LiveClass(models.Model):
 
     title = models.CharField(max_length=200)
     description = models.TextField(blank=True)
-    classroom = models.ForeignKey(
-        Classroom, on_delete=models.CASCADE, related_name="live_classes"
-    )
+    classroom = models.ForeignKey(Classroom, on_delete=models.CASCADE, related_name="live_classes")
     # required: the subject's teaching assignment decides who may host it
     subject = models.ForeignKey(Subject, on_delete=models.PROTECT, related_name="live_classes")
     term = models.ForeignKey(Term, on_delete=models.PROTECT, related_name="live_classes")

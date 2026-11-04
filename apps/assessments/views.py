@@ -66,14 +66,10 @@ class AssessmentViewSet(
         serializer.is_valid(raise_exception=True)
         data = serializer.validated_data
         answers = data.pop("answers", [])
-        submission = Submission.objects.create(
-            assessment=assessment, student=request.user, **data
-        )
+        submission = Submission.objects.create(assessment=assessment, student=request.user, **data)
         Answer.objects.bulk_create([Answer(submission=submission, **answer) for answer in answers])
         if assessment.type == Assessment.Type.QUIZ:
-            submission.score = sum(
-                a["question"].points for a in answers if a["choice"].is_correct
-            )
+            submission.score = sum(a["question"].points for a in answers if a["choice"].is_correct)
             submission.graded_at = timezone.now()
             submission.save(update_fields=["score", "graded_at"])
         return Response(SubmissionSerializer(submission).data, status=201)

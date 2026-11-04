@@ -20,6 +20,4 @@ class TeachesSubjectOrAdmin(BasePermission):
         target = obj
         for hop in filter(None, getattr(view, "teaching_path", "").split(".")):
             target = getattr(target, hop)
-        return teaches(
-            request.user, target.classroom_id, target.subject_id, target.term.session_id
-        )
+        return teaches(request.user, target.classroom_id, target.subject_id, target.term.session_id)

@@ -23,6 +23,7 @@ class LiveClassViewSet(
     viewsets.ModelViewSet,
 ):
     """Live classes. The subject's teacher (or an admin) schedules and edits them."""
+
     serializer_class = LiveClassSerializer
     queryset = LiveClass.objects.select_related(
         "classroom__level", "subject", "term", "hosted_by"

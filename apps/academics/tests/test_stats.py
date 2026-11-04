@@ -53,5 +53,8 @@ def test_stats_class_size_is_for_the_current_session(auth, kit, admin_user):
     last_year = create_session(kit.school, "2024/2025")
     enroll(kit.outsider, kit.classroom, session=last_year)
     make_classroom(kit.school, "B")
-    rows = {c["name"]: c["students"] for c in auth(admin_user).get("/api/v1/stats/").json()["classrooms"]}
+    rows = {
+        c["name"]: c["students"]
+        for c in auth(admin_user).get("/api/v1/stats/").json()["classrooms"]
+    }
     assert rows == {"JSS1A": 1, "JSS1B": 0}
