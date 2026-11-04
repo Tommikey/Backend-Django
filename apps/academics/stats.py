@@ -6,7 +6,7 @@ from apps.academics.rules import current_session
 from apps.accounts.models import User
 from apps.accounts.permissions import IsAdmin
 from apps.assessments.models import Assessment, Submission
-from apps.sessions.models import StudySession
+from apps.live_classes.models import LiveClass
 
 
 class StatsView(APIView):
@@ -32,7 +32,7 @@ class StatsView(APIView):
             "lessons": Lesson.objects.filter(**in_school).count(),
             "assessments": Assessment.objects.filter(**in_school).count(),
             "submissions": submissions.count(),
-            "sessions": StudySession.objects.filter(**in_school).count(),
+            "live_classes": LiveClass.objects.filter(**in_school).count(),
         }
         classrooms = []
         session = current_session(school_id)
@@ -46,7 +46,7 @@ class StatsView(APIView):
                     "students": c.enrollments.filter(session=session).count(),
                     "lessons": c.lessons.count(),
                     "assessments": c.assessments.count(),
-                    "sessions": c.study_sessions.count(),
+                    "live_classes": c.live_classes.count(),
                     "avg_score_pct": round(
                         sum(s.score / s.assessment.max_points * 100 for s in class_scores)
                         / len(class_scores),

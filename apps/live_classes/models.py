@@ -4,20 +4,22 @@ from django.db import models
 from apps.academics.models import Classroom, Subject, Term
 
 
-class StudySession(models.Model):
+class LiveClass(models.Model):
+    """A scheduled online class for one class arm and subject, e.g. a revision call."""
+
     title = models.CharField(max_length=200)
     description = models.TextField(blank=True)
     classroom = models.ForeignKey(
-        Classroom, on_delete=models.CASCADE, related_name="study_sessions"
+        Classroom, on_delete=models.CASCADE, related_name="live_classes"
     )
     # required: the subject's teaching assignment decides who may host it
-    subject = models.ForeignKey(Subject, on_delete=models.PROTECT, related_name="study_sessions")
-    term = models.ForeignKey(Term, on_delete=models.PROTECT, related_name="study_sessions")
+    subject = models.ForeignKey(Subject, on_delete=models.PROTECT, related_name="live_classes")
+    term = models.ForeignKey(Term, on_delete=models.PROTECT, related_name="live_classes")
     hosted_by = models.ForeignKey(
         settings.AUTH_USER_MODEL,
         null=True,
         on_delete=models.SET_NULL,
-        related_name="sessions_hosted",
+        related_name="live_classes_hosted",
     )
     starts_at = models.DateTimeField()
     ends_at = models.DateTimeField(null=True, blank=True)

@@ -3,12 +3,12 @@ from datetime import timedelta
 import pytest
 from django.utils import timezone
 
-from apps.sessions.models import StudySession
+from apps.live_classes.models import LiveClass
 from conftest import results
 
 pytestmark = pytest.mark.django_db
 
-URL = "/api/v1/sessions/"
+URL = "/api/v1/live-classes/"
 
 
 def payload(kit, **overrides):
@@ -23,7 +23,7 @@ def payload(kit, **overrides):
 
 
 def make_live_class(kit, title="S", starts_in=timedelta(days=1)):
-    return StudySession.objects.create(
+    return LiveClass.objects.create(
         title=title,
         classroom=kit.classroom,
         subject=kit.subject,
@@ -37,7 +37,7 @@ def make_live_class(kit, title="S", starts_in=timedelta(days=1)):
 def test_subject_teacher_schedules_live_class(auth, kit):
     r = auth(kit.teacher).post(URL, payload(kit))
     assert r.status_code == 201, r.content
-    live = StudySession.objects.get(pk=r.data["id"])
+    live = LiveClass.objects.get(pk=r.data["id"])
     assert live.hosted_by == kit.teacher and live.term == kit.term
 
 

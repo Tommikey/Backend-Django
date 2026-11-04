@@ -22,7 +22,7 @@ PROTECTED_LIST_URLS = [
     "/api/v1/academics/progress/",
     "/api/v1/assessments/",
     "/api/v1/submissions/",
-    "/api/v1/sessions/",
+    "/api/v1/live-classes/",
     "/api/v1/stats/",
 ]
 

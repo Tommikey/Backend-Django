@@ -41,7 +41,7 @@ def test_stats_counts(auth, kit, scored_quiz, admin_user):
         "lessons": 0,
         "assessments": 1,
         "submissions": 1,
-        "sessions": 0,
+        "live_classes": 0,
     }
     [row] = data["classrooms"]
     assert row["name"] == "JSS1A"

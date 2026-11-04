@@ -12,7 +12,7 @@ urlpatterns = [
     path("api/v1/", include("apps.accounts.urls")),
     path("api/v1/", include("apps.academics.urls")),
     path("api/v1/", include("apps.assessments.urls")),
-    path("api/v1/", include("apps.sessions.urls")),
+    path("api/v1/", include("apps.live_classes.urls")),
 ]
 
 if settings.DEBUG:

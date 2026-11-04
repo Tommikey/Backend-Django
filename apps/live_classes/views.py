@@ -11,11 +11,11 @@ from apps.accounts.access import (
     SchoolScopedMixin,
 )
 
-from .models import StudySession
-from .serializers import StudySessionSerializer
+from .models import LiveClass
+from .serializers import LiveClassSerializer
 
 
-class StudySessionViewSet(
+class LiveClassViewSet(
     RolePermissionsMixin,
     SchoolScopedMixin,
     AudienceScopedMixin,
@@ -23,8 +23,8 @@ class StudySessionViewSet(
     viewsets.ModelViewSet,
 ):
     """Live classes. The subject's teacher (or an admin) schedules and edits them."""
-    serializer_class = StudySessionSerializer
-    queryset = StudySession.objects.select_related(
+    serializer_class = LiveClassSerializer
+    queryset = LiveClass.objects.select_related(
         "classroom__level", "subject", "term", "hosted_by"
     ).order_by("starts_at")
     owner_field = "hosted_by"

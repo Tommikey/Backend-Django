@@ -1,10 +1,10 @@
 from django.contrib import admin
 
-from .models import StudySession
+from .models import LiveClass
 
 
-@admin.register(StudySession)
-class StudySessionAdmin(admin.ModelAdmin):
+@admin.register(LiveClass)
+class LiveClassAdmin(admin.ModelAdmin):
     list_display = ["title", "classroom", "subject", "hosted_by", "starts_at", "ends_at"]
     list_filter = ["classroom"]
     search_fields = ["title"]

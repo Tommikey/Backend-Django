@@ -3,10 +3,10 @@ from rest_framework import serializers
 from apps.academics.serializers import TeachingScopeSerializerMixin, term_field
 from apps.accounts.access import SameSchoolSerializerMixin
 
-from .models import StudySession
+from .models import LiveClass
 
 
-class StudySessionSerializer(
+class LiveClassSerializer(
     TeachingScopeSerializerMixin, SameSchoolSerializerMixin, serializers.ModelSerializer
 ):
     term = term_field()
@@ -18,7 +18,7 @@ class StudySessionSerializer(
     )
 
     class Meta:
-        model = StudySession
+        model = LiveClass
         fields = [
             "id",
             "title",

@@ -17,9 +17,9 @@ from apps.academics.models import (
 from apps.academics.services import create_session
 from apps.accounts.models import Guardianship, User
 from apps.assessments.models import Answer, Assessment, Choice, Question, Submission
+from apps.live_classes.models import LiveClass
 from apps.schools.models import School
 from apps.schools.services import onboard_school
-from apps.sessions.models import StudySession
 
 PASSWORD = "pass1234"
 
@@ -188,7 +188,7 @@ def build_school(slug, name, system, prefix):
         graded_at=now,
     )
 
-    StudySession.objects.create(
+    LiveClass.objects.create(
         title="Algebra Revision Session",
         classroom=class_a,
         subject=maths,

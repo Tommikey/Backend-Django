@@ -8,7 +8,7 @@ from django.utils import timezone
 from apps.academics.models import Lesson, Subject
 from apps.accounts.models import Guardianship
 from apps.assessments.models import Assessment, Submission
-from apps.sessions.models import StudySession
+from apps.live_classes.models import LiveClass
 from conftest import assign, enroll, make_classroom, results
 
 pytestmark = pytest.mark.django_db
@@ -32,7 +32,7 @@ def theirs(make_user, other_school):
         title="Essay", type="assignment", created_by=teacher, **in_class
     )
     submission = Submission.objects.create(assessment=assessment, student=student, text="hi")
-    live = StudySession.objects.create(
+    live = LiveClass.objects.create(
         title="Revision",
         starts_at=timezone.now() + timedelta(days=1),
         join_url="https://meet.jit.si/x",
@@ -63,7 +63,7 @@ def theirs(make_user, other_school):
             "academics/lessons": f"/api/v1/academics/lessons/{lesson.pk}/",
             "assessments": f"/api/v1/assessments/{assessment.pk}/",
             "submissions": f"/api/v1/submissions/{submission.pk}/",
-            "sessions": f"/api/v1/sessions/{live.pk}/",
+            "live-classes": f"/api/v1/live-classes/{live.pk}/",
         },
     }
 
@@ -81,7 +81,7 @@ RESOURCES = [
     "academics/lessons",
     "assessments",
     "submissions",
-    "sessions",
+    "live-classes",
 ]
 # endpoints without a delete action answer 405 to DELETE whatever the object
 NO_DELETE = {"submissions", "academics/terms"}
@@ -173,7 +173,7 @@ def test_stats_count_only_own_school(auth, admin_user, theirs):
         "lessons": 0,
         "assessments": 0,
         "submissions": 0,
-        "sessions": 0,
+        "live_classes": 0,
     }
 
 
