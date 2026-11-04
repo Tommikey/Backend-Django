@@ -51,9 +51,31 @@ class SchoolUserSerializer(serializers.ModelSerializer):
         validate_password(value)
         return value
 
+    def validate_username(self, value):
+        clash = User.objects.filter(username__iexact=value)
+        if self.instance is not None:
+            clash = clash.exclude(pk=self.instance.pk)
+        if clash.exists():
+            raise serializers.ValidationError("This username is taken.")
+        return value
+
     def validate(self, attrs):
-        if self.instance is None and not attrs.get("password"):
-            raise serializers.ValidationError({"password": "Required when creating a user."})
+        user = self.instance
+        if user is None:
+            if not attrs.get("password"):
+                raise serializers.ValidationError({"password": "Required when creating a user."})
+            return attrs
+        # a role decides what a user's records mean (a student's marks, a teacher's classes),
+        # so it is fixed at creation; make a new account for a different role
+        if "role" in attrs and attrs["role"] != user.role:
+            raise serializers.ValidationError(
+                {"role": "A role can't be changed; create a new account instead."}
+            )
+        # only active admins edit users, so refusing self-deactivation always leaves one
+        if attrs.get("is_active") is False and user == self.context["request"].user:
+            raise serializers.ValidationError(
+                {"is_active": "You can't deactivate your own account."}
+            )
         return attrs
 
     def create(self, validated_data):

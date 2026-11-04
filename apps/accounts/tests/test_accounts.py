@@ -136,3 +136,53 @@ def test_parents_cannot_create_links(auth, make_user):
     parent, student = make_user("parent"), make_user("student")
     r = auth(parent).post(LINKS_URL, {"parent": parent.pk, "student": student.pk})
     assert r.status_code == 403
+
+
+# --- keeping school records safe ---------------------------------------------------------------
+
+
+def test_deleting_someone_with_records_is_refused(auth, admin_user, kit):
+    from apps.results.models import Score
+
+    component = kit.school.components.first()
+    Score.objects.create(
+        student=kit.student, subject=kit.subject, term=kit.term, component=component, value=10
+    )
+    for person in (kit.student, kit.teacher):  # enrolled / assigned
+        r = auth(admin_user).delete(f"{USERS_URL}{person.pk}/")
+        assert r.status_code == 409 and "Deactivate" in r.json()["detail"]
+    assert Score.objects.filter(student=kit.student).exists()
+
+    # deactivating is the way out; a fresh account with no records can still be deleted
+    r = auth(admin_user).patch(f"{USERS_URL}{kit.student.pk}/", {"is_active": False})
+    assert r.status_code == 200 and r.json()["is_active"] is False
+    assert auth(admin_user).delete(f"{USERS_URL}{kit.outsider.pk}/").status_code == 204
+
+
+def test_roles_are_fixed_after_creation(auth, admin_user, make_user):
+    student = make_user("student")
+    r = auth(admin_user).patch(f"{USERS_URL}{student.pk}/", {"role": "teacher"})
+    assert r.status_code == 400 and "role" in r.json()
+    r = auth(admin_user).patch(f"{USERS_URL}{admin_user.pk}/", {"role": "teacher"})
+    assert r.status_code == 400
+    # sending the same role back (a full PUT from a form) is fine
+    r = auth(admin_user).patch(
+        f"{USERS_URL}{student.pk}/", {"role": "student", "first_name": "Ada"}
+    )
+    assert r.status_code == 200
+
+
+def test_school_keeps_an_active_admin(auth, admin_user, make_user):
+    r = auth(admin_user).patch(f"{USERS_URL}{admin_user.pk}/", {"is_active": False})
+    assert r.status_code == 400  # not yourself
+    second = make_user("admin")
+    r = auth(second).patch(f"{USERS_URL}{admin_user.pk}/", {"is_active": False})
+    assert r.status_code == 200  # the admin doing it is still active
+    r = auth(second).patch(f"{USERS_URL}{admin_user.pk}/", {"is_active": True})
+    assert r.status_code == 200
+
+
+def test_usernames_are_case_insensitive(auth, admin_user, make_user):
+    make_user("student", username="Chidi")
+    r = auth(admin_user).post(USERS_URL, new_user("student", "chidi"))
+    assert r.status_code == 400 and "username" in r.json()

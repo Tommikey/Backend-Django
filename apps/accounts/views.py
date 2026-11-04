@@ -1,7 +1,7 @@
 from rest_framework import generics, viewsets
 from rest_framework.exceptions import ValidationError
 
-from .access import RolePermissionsMixin, SchoolScopedMixin
+from .access import InUse, RolePermissionsMixin, SchoolScopedMixin
 from .models import Guardianship, User
 from .permissions import IsAdmin, IsTeacherOrAdmin
 from .serializers import GuardianshipSerializer, SchoolUserSerializer, UserSerializer
@@ -31,7 +31,31 @@ class UserViewSet(RolePermissionsMixin, SchoolScopedMixin, viewsets.ModelViewSet
     def perform_destroy(self, instance):
         if instance == self.request.user:
             raise ValidationError("You can't delete your own account.")
+        if has_history(instance):
+            # deleting would cascade into marks, report cards, attendance and work
+            raise InUse(
+                "This person has school records (classes, marks, attendance or work). "
+                "Deactivate the account instead (is_active: false)."
+            )
         instance.delete()
+
+
+# relations whose rows would be deleted with the user; any of them means "keep the account"
+HISTORY = (
+    "enrollments",
+    "teaching_assignments",
+    "scores",
+    "term_results",
+    "attendance_records",
+    "submissions",
+    "completions",
+    "children_links",
+    "guardian_links",
+)
+
+
+def has_history(user):
+    return any(getattr(user, name).exists() for name in HISTORY)
 
 
 class GuardianshipViewSet(RolePermissionsMixin, SchoolScopedMixin, viewsets.ModelViewSet):
