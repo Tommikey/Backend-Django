@@ -186,3 +186,21 @@ def test_usernames_are_case_insensitive(auth, admin_user, make_user):
     make_user("student", username="Chidi")
     r = auth(admin_user).post(USERS_URL, new_user("student", "chidi"))
     assert r.status_code == 400 and "username" in r.json()
+
+
+def test_suspended_school_is_locked_out(api, auth, make_user, school):
+    user = make_user("teacher")
+    tokens = api.post(
+        "/api/v1/auth/token/", {"username": user.username, "password": PASSWORD}
+    ).json()
+    client = auth(user)
+    assert client.get("/api/v1/auth/me/").status_code == 200
+
+    school.is_active = False
+    school.save()
+    assert client.get("/api/v1/auth/me/").status_code == 401  # existing access token
+    api.credentials()
+    login = api.post("/api/v1/auth/token/", {"username": user.username, "password": PASSWORD})
+    assert login.status_code == 401
+    refresh = api.post("/api/v1/auth/token/refresh/", {"refresh": tokens["refresh"]})
+    assert refresh.status_code == 401
