@@ -30,13 +30,13 @@ QUIZ_PAYLOAD = {
 
 
 @pytest.fixture
-def setup(make_user):
+def setup(make_user, school):
     teacher = make_user("teacher")
     student = make_user("student")
     outsider = make_user("student")
-    classroom = Classroom.objects.create(name="8A", created_by=teacher)
+    classroom = Classroom.objects.create(school=school, name="8A", created_by=teacher)
     Enrollment.objects.create(classroom=classroom, student=student)
-    subject = Subject.objects.create(name="Math")
+    subject = Subject.objects.create(school=school, name="Math")
     return teacher, student, outsider, classroom, subject
 
 

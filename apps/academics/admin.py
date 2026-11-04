@@ -5,12 +5,14 @@ from .models import Classroom, Completion, Enrollment, Lesson, Subject
 
 @admin.register(Subject)
 class SubjectAdmin(admin.ModelAdmin):
-    list_display = ["name"]
+    list_display = ["name", "school"]
+    list_filter = ["school"]
 
 
 @admin.register(Classroom)
 class ClassroomAdmin(admin.ModelAdmin):
-    list_display = ["name", "created_by", "created_at"]
+    list_display = ["name", "school", "created_by", "created_at"]
+    list_filter = ["school"]
     search_fields = ["name"]
 
 

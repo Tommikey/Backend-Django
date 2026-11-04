@@ -31,12 +31,12 @@ def test_anonymous_gets_401_not_500(api, url):
 
 
 @pytest.fixture
-def owned(make_user):
+def owned(make_user, school):
     """One object of each owned kind, all belonging to `owner`."""
     owner = make_user("teacher")
     other = make_user("teacher")
-    subject = Subject.objects.create(name="Math")
-    classroom = Classroom.objects.create(name="8A", created_by=owner)
+    subject = Subject.objects.create(school=school, name="Math")
+    classroom = Classroom.objects.create(school=school, name="8A", created_by=owner)
     lesson = Lesson.objects.create(
         title="Fractions", classroom=classroom, subject=subject, created_by=owner
     )

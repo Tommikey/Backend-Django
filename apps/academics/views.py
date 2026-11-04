@@ -6,6 +6,7 @@ from rest_framework.views import APIView
 from apps.accounts.access import (
     OwnedObjectMixin,
     RolePermissionsMixin,
+    SchoolScopedMixin,
     StudentScopedQuerysetMixin,
 )
 from apps.accounts.permissions import IsStudent
@@ -21,13 +22,17 @@ from .serializers import (
 )
 
 
-class SubjectViewSet(RolePermissionsMixin, viewsets.ModelViewSet):
+class SubjectViewSet(RolePermissionsMixin, SchoolScopedMixin, viewsets.ModelViewSet):
     serializer_class = SubjectSerializer
     queryset = Subject.objects.order_by("name")
 
 
 class ClassroomViewSet(
-    RolePermissionsMixin, OwnedObjectMixin, StudentScopedQuerysetMixin, viewsets.ModelViewSet
+    RolePermissionsMixin,
+    SchoolScopedMixin,
+    OwnedObjectMixin,
+    StudentScopedQuerysetMixin,
+    viewsets.ModelViewSet,
 ):
     serializer_class = ClassroomSerializer
     queryset = Classroom.objects.select_related("created_by").order_by("name")
@@ -35,14 +40,21 @@ class ClassroomViewSet(
     student_scope = "enrollments__student"
 
 
-class EnrollmentViewSet(RolePermissionsMixin, StudentScopedQuerysetMixin, viewsets.ModelViewSet):
+class EnrollmentViewSet(
+    RolePermissionsMixin, SchoolScopedMixin, StudentScopedQuerysetMixin, viewsets.ModelViewSet
+):
     serializer_class = EnrollmentSerializer
     queryset = Enrollment.objects.select_related("classroom", "student").order_by("-created_at")
+    school_path = "classroom__school"
     student_scope = "student"
 
 
 class LessonViewSet(
-    RolePermissionsMixin, OwnedObjectMixin, StudentScopedQuerysetMixin, viewsets.ModelViewSet
+    RolePermissionsMixin,
+    SchoolScopedMixin,
+    OwnedObjectMixin,
+    StudentScopedQuerysetMixin,
+    viewsets.ModelViewSet,
 ):
     serializer_class = LessonSerializer
     queryset = (
@@ -50,6 +62,7 @@ class LessonViewSet(
     )
     action_permissions = {"complete": (IsStudent,)}
     owner_scoped = True
+    school_path = "classroom__school"
     student_scope = "classroom__enrollments__student"
 
     @action(detail=True, methods=["post"])
@@ -67,7 +80,8 @@ class ProgressView(APIView):
         if is_student:
             classrooms = Classroom.objects.filter(enrollments__student=request.user).distinct()
         else:
-            qs = Classroom.objects.prefetch_related("enrollments")
+            qs = Classroom.objects.filter(school_id=request.user.school_id)
+            qs = qs.prefetch_related("enrollments")
             if classroom_id := request.query_params.get("classroom"):
                 qs = qs.filter(pk=classroom_id)
             classrooms = qs

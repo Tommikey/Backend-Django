@@ -4,6 +4,7 @@ from rest_framework import viewsets
 from apps.accounts.access import (
     OwnedObjectMixin,
     RolePermissionsMixin,
+    SchoolScopedMixin,
     StudentScopedQuerysetMixin,
 )
 
@@ -12,7 +13,11 @@ from .serializers import StudySessionSerializer
 
 
 class StudySessionViewSet(
-    RolePermissionsMixin, OwnedObjectMixin, StudentScopedQuerysetMixin, viewsets.ModelViewSet
+    RolePermissionsMixin,
+    SchoolScopedMixin,
+    OwnedObjectMixin,
+    StudentScopedQuerysetMixin,
+    viewsets.ModelViewSet,
 ):
     serializer_class = StudySessionSerializer
     queryset = StudySession.objects.select_related("classroom", "subject", "hosted_by").order_by(
@@ -20,6 +25,7 @@ class StudySessionViewSet(
     )
     owner_field = "hosted_by"
     owner_scoped = True
+    school_path = "classroom__school"
     student_scope = "classroom__enrollments__student"
 
     def get_queryset(self):

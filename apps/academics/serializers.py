@@ -1,17 +1,21 @@
 from rest_framework import serializers
 
+from apps.accounts.access import SameSchoolSerializerMixin
 from apps.accounts.models import User
 
 from .models import Classroom, Completion, Enrollment, Lesson, Subject
 
 
-class SubjectSerializer(serializers.ModelSerializer):
+class SubjectSerializer(SameSchoolSerializerMixin, serializers.ModelSerializer):
     class Meta:
         model = Subject
         fields = ["id", "name", "description"]
 
+    def validate_name(self, value):
+        return self.unique_in_school("name", value)
 
-class ClassroomSerializer(serializers.ModelSerializer):
+
+class ClassroomSerializer(SameSchoolSerializerMixin, serializers.ModelSerializer):
     created_by_name = serializers.CharField(source="created_by.get_full_name", read_only=True)
 
     class Meta:
@@ -19,8 +23,11 @@ class ClassroomSerializer(serializers.ModelSerializer):
         fields = ["id", "name", "description", "created_by", "created_by_name", "created_at"]
         read_only_fields = ["created_by", "created_at"]
 
+    def validate_name(self, value):
+        return self.unique_in_school("name", value)
 
-class EnrollmentSerializer(serializers.ModelSerializer):
+
+class EnrollmentSerializer(SameSchoolSerializerMixin, serializers.ModelSerializer):
     classroom_name = serializers.CharField(source="classroom.name", read_only=True)
     student_name = serializers.CharField(source="student.get_full_name", read_only=True)
 
@@ -35,7 +42,7 @@ class EnrollmentSerializer(serializers.ModelSerializer):
         return value
 
 
-class LessonSerializer(serializers.ModelSerializer):
+class LessonSerializer(SameSchoolSerializerMixin, serializers.ModelSerializer):
     classroom_name = serializers.CharField(source="classroom.name", read_only=True)
     subject_name = serializers.CharField(source="subject.name", read_only=True)
     created_by_name = serializers.CharField(source="created_by.get_full_name", read_only=True)

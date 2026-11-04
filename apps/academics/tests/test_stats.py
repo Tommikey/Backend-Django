@@ -7,12 +7,12 @@ pytestmark = pytest.mark.django_db
 
 
 @pytest.fixture
-def school(make_user):
+def stats_data(make_user, school):
     teacher = make_user("teacher")
     student = make_user("student")
-    classroom = Classroom.objects.create(name="8A", created_by=teacher)
+    classroom = Classroom.objects.create(school=school, name="8A", created_by=teacher)
     Enrollment.objects.create(classroom=classroom, student=student)
-    subject = Subject.objects.create(name="Math")
+    subject = Subject.objects.create(school=school, name="Math")
     quiz = Assessment.objects.create(
         title="Q", type="quiz", classroom=classroom, subject=subject, created_by=teacher, max_points=2
     )
@@ -20,19 +20,20 @@ def school(make_user):
     return teacher, student, classroom
 
 
-def test_stats_admin_only(api, auth, school, make_user):
-    teacher, _, _ = school
+def test_stats_admin_only(api, auth, stats_data, make_user):
+    teacher, _, _ = stats_data
     assert auth(teacher).get("/api/v1/stats/").status_code == 403
     student = make_user("student")
     assert auth(student).get("/api/v1/stats/").status_code == 403
 
 
-def test_stats_counts(api, auth, school, admin_user):
-    teacher, student, classroom = school
+def test_stats_counts(api, auth, stats_data, admin_user):
+    teacher, student, classroom = stats_data
     data = auth(admin_user).get("/api/v1/stats/").json()
     assert data["counts"] == {
         "students": 1,
         "teachers": 1,
+        "parents": 0,
         "classrooms": 1,
         "lessons": 0,
         "assessments": 1,

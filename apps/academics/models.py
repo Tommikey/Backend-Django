@@ -3,15 +3,24 @@ from django.db import models
 
 
 class Subject(models.Model):
-    name = models.CharField(max_length=100, unique=True)
+    school = models.ForeignKey("schools.School", on_delete=models.CASCADE, related_name="subjects")
+    name = models.CharField(max_length=100)
     description = models.TextField(blank=True)
+
+    class Meta:
+        constraints = [
+            models.UniqueConstraint(fields=["school", "name"], name="unique_school_subject"),
+        ]
 
     def __str__(self):
         return self.name
 
 
 class Classroom(models.Model):
-    name = models.CharField(max_length=100, unique=True)
+    school = models.ForeignKey(
+        "schools.School", on_delete=models.CASCADE, related_name="classrooms"
+    )
+    name = models.CharField(max_length=100)
     description = models.TextField(blank=True)
     created_by = models.ForeignKey(
         settings.AUTH_USER_MODEL,
@@ -20,6 +29,11 @@ class Classroom(models.Model):
         related_name="classrooms_created",
     )
     created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        constraints = [
+            models.UniqueConstraint(fields=["school", "name"], name="unique_school_classroom"),
+        ]
 
     def __str__(self):
         return self.name

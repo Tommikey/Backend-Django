@@ -1,5 +1,7 @@
 from rest_framework import serializers
 
+from apps.accounts.access import SameSchoolSerializerMixin
+
 from .models import Answer, Assessment, Choice, Question, Submission
 
 
@@ -31,7 +33,7 @@ class QuestionStudentSerializer(serializers.ModelSerializer):
         fields = ["id", "text", "points", "choices"]
 
 
-class AssessmentSerializer(serializers.ModelSerializer):
+class AssessmentSerializer(SameSchoolSerializerMixin, serializers.ModelSerializer):
     questions = QuestionSerializer(many=True, required=False)
     classroom_name = serializers.CharField(source="classroom.name", read_only=True)
     subject_name = serializers.CharField(source="subject.name", read_only=True)

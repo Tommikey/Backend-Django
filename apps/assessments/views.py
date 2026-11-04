@@ -7,6 +7,7 @@ from rest_framework.status import HTTP_409_CONFLICT
 from apps.accounts.access import (
     OwnedObjectMixin,
     RolePermissionsMixin,
+    SchoolScopedMixin,
     StudentScopedQuerysetMixin,
 )
 from apps.accounts.permissions import IsStudent
@@ -22,7 +23,11 @@ from .serializers import (
 
 
 class AssessmentViewSet(
-    RolePermissionsMixin, OwnedObjectMixin, StudentScopedQuerysetMixin, viewsets.ModelViewSet
+    RolePermissionsMixin,
+    SchoolScopedMixin,
+    OwnedObjectMixin,
+    StudentScopedQuerysetMixin,
+    viewsets.ModelViewSet,
 ):
     queryset = (
         Assessment.objects.select_related("classroom", "subject", "created_by")
@@ -31,6 +36,7 @@ class AssessmentViewSet(
     )
     action_permissions = {"submit": (IsStudent,)}
     owner_scoped = True
+    school_path = "classroom__school"
     student_scope = "classroom__enrollments__student"
 
     def get_serializer_class(self):
@@ -64,6 +70,7 @@ class AssessmentViewSet(
 
 class SubmissionViewSet(
     RolePermissionsMixin,
+    SchoolScopedMixin,
     StudentScopedQuerysetMixin,
     mixins.ListModelMixin,
     mixins.RetrieveModelMixin,
@@ -77,6 +84,7 @@ class SubmissionViewSet(
         .order_by("-submitted_at")
     )
     student_scope = "student"
+    school_path = "assessment__classroom__school"
 
     def get_serializer_class(self):
         if self.action in {"update", "partial_update"}:

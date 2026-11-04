@@ -9,27 +9,32 @@ from apps.sessions.models import StudySession
 
 
 class StatsView(APIView):
-    """School-wide counts and per-classroom breakdown. Admin only."""
+    """Counts and per-classroom breakdown for the admin's own school. Admin only."""
 
     permission_classes = [IsAdmin]
 
     def get(self, request):
+        school_id = request.user.school_id
+        in_school = {"classroom__school_id": school_id}
+        submissions = Submission.objects.filter(assessment__classroom__school_id=school_id)
         scored = [
             s
-            for s in Submission.objects.select_related("assessment")
+            for s in submissions.select_related("assessment")
             if s.score is not None and s.assessment.max_points
         ]
+        users = User.objects.filter(school_id=school_id)
         counts = {
-            "students": User.objects.filter(role=User.Role.STUDENT).count(),
-            "teachers": User.objects.filter(role=User.Role.TEACHER).count(),
-            "classrooms": Classroom.objects.count(),
-            "lessons": Lesson.objects.count(),
-            "assessments": Assessment.objects.count(),
-            "submissions": Submission.objects.count(),
-            "sessions": StudySession.objects.count(),
+            "students": users.filter(role=User.Role.STUDENT).count(),
+            "teachers": users.filter(role=User.Role.TEACHER).count(),
+            "parents": users.filter(role=User.Role.PARENT).count(),
+            "classrooms": Classroom.objects.filter(school_id=school_id).count(),
+            "lessons": Lesson.objects.filter(**in_school).count(),
+            "assessments": Assessment.objects.filter(**in_school).count(),
+            "submissions": submissions.count(),
+            "sessions": StudySession.objects.filter(**in_school).count(),
         }
         classrooms = []
-        for c in Classroom.objects.prefetch_related("enrollments"):
+        for c in Classroom.objects.filter(school_id=school_id).prefetch_related("enrollments"):
             class_scores = [s for s in scored if s.assessment.classroom_id == c.pk]
             classrooms.append(
                 {

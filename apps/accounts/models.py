@@ -1,4 +1,5 @@
 from django.contrib.auth.models import AbstractUser
+from django.core.exceptions import ValidationError
 from django.db import models
 
 
@@ -6,12 +7,42 @@ class User(AbstractUser):
     class Role(models.TextChoices):
         STUDENT = "student", "Student"
         TEACHER = "teacher", "Teacher"
+        PARENT = "parent", "Parent"
         ADMIN = "admin", "Admin"
 
     role = models.CharField(max_length=10, choices=Role.choices, default=Role.STUDENT)
+    # every user belongs to one school; only platform staff (superusers) have none
+    school = models.ForeignKey(
+        "schools.School", null=True, blank=True, on_delete=models.CASCADE, related_name="users"
+    )
 
     # shortcut: superusers are always admins, keeps the role invariant in one place
     def save(self, *args, **kwargs):
         if self.is_superuser:
             self.role = self.Role.ADMIN
         super().save(*args, **kwargs)
+
+
+class Guardianship(models.Model):
+    """Links a parent account to a student. Created by the school, never self-claimed."""
+
+    parent = models.ForeignKey(User, on_delete=models.CASCADE, related_name="children_links")
+    student = models.ForeignKey(User, on_delete=models.CASCADE, related_name="guardian_links")
+    relationship = models.CharField(max_length=30, blank=True)  # e.g. Mother, Uncle
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        constraints = [
+            models.UniqueConstraint(fields=["parent", "student"], name="unique_parent_student"),
+        ]
+
+    def __str__(self):
+        return f"{self.parent} -> {self.student}"
+
+    def clean(self):
+        if self.parent.role != User.Role.PARENT:
+            raise ValidationError({"parent": "Must be a parent account."})
+        if self.student.role != User.Role.STUDENT:
+            raise ValidationError({"student": "Must be a student account."})
+        if self.parent.school_id != self.student.school_id:
+            raise ValidationError("Parent and student must belong to the same school.")

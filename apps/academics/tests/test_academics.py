@@ -7,13 +7,13 @@ pytestmark = pytest.mark.django_db
 
 
 @pytest.fixture
-def setup(make_user):
+def setup(make_user, school):
     teacher = make_user("teacher")
     student = make_user("student")
     other = make_user("student")
-    classroom = Classroom.objects.create(name="8A", created_by=teacher)
+    classroom = Classroom.objects.create(school=school, name="8A", created_by=teacher)
     Enrollment.objects.create(classroom=classroom, student=student)
-    subject = Subject.objects.create(name="Math")
+    subject = Subject.objects.create(school=school, name="Math")
     return teacher, student, other, classroom, subject
 
 
@@ -42,7 +42,7 @@ def test_student_cannot_create_lesson(api, auth, setup):
 
 def test_student_sees_only_enrolled_classroom_lessons(api, auth, setup):
     teacher, student, other, classroom, subject = setup
-    hidden = Classroom.objects.create(name="9B", created_by=teacher)
+    hidden = Classroom.objects.create(school=classroom.school, name="9B", created_by=teacher)
     Lesson.objects.create(title="In 8A", classroom=classroom, subject=subject, created_by=teacher)
     Lesson.objects.create(title="In 9B", classroom=hidden, subject=subject, created_by=teacher)
     visible = results(auth(student).get("/api/v1/academics/lessons/").json())

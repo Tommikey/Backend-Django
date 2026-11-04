@@ -1,12 +1,10 @@
-from rest_framework import generics
-from rest_framework.permissions import AllowAny
+from rest_framework import generics, viewsets
+from rest_framework.exceptions import ValidationError
 
-from .serializers import RegisterSerializer, UserSerializer
-
-
-class RegisterView(generics.CreateAPIView):
-    serializer_class = RegisterSerializer
-    permission_classes = [AllowAny]
+from .access import RolePermissionsMixin, SchoolScopedMixin
+from .models import Guardianship, User
+from .permissions import IsAdmin, IsTeacherOrAdmin
+from .serializers import GuardianshipSerializer, SchoolUserSerializer, UserSerializer
 
 
 class MeView(generics.RetrieveUpdateAPIView):
@@ -14,3 +12,41 @@ class MeView(generics.RetrieveUpdateAPIView):
 
     def get_object(self):
         return self.request.user
+
+
+class UserViewSet(RolePermissionsMixin, SchoolScopedMixin, viewsets.ModelViewSet):
+    """The school's people. Admins manage them; teachers can look them up."""
+
+    serializer_class = SchoolUserSerializer
+    queryset = User.objects.order_by("role", "last_name", "first_name", "username")
+    write_permissions = (IsAdmin,)
+    action_permissions = {"list": (IsTeacherOrAdmin,), "retrieve": (IsTeacherOrAdmin,)}
+
+    def get_queryset(self):
+        qs = super().get_queryset()
+        if role := self.request.query_params.get("role"):
+            qs = qs.filter(role=role)
+        return qs
+
+    def perform_destroy(self, instance):
+        if instance == self.request.user:
+            raise ValidationError("You can't delete your own account.")
+        instance.delete()
+
+
+class GuardianshipViewSet(RolePermissionsMixin, SchoolScopedMixin, viewsets.ModelViewSet):
+    """Parent-to-student links. Admins manage them; parents and students see their own."""
+
+    serializer_class = GuardianshipSerializer
+    queryset = Guardianship.objects.select_related("parent", "student").order_by("-created_at")
+    school_path = "student__school"
+    write_permissions = (IsAdmin,)
+
+    def get_queryset(self):
+        qs = super().get_queryset()
+        user = self.request.user
+        if user.role == User.Role.PARENT:
+            qs = qs.filter(parent=user)
+        elif user.role == User.Role.STUDENT:
+            qs = qs.filter(student=user)
+        return qs

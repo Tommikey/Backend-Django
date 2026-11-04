@@ -4,8 +4,10 @@ from django.core.management.base import BaseCommand
 from django.utils import timezone
 
 from apps.academics.models import Classroom, Completion, Enrollment, Lesson, Subject
-from apps.accounts.models import User
+from apps.accounts.models import Guardianship, User
 from apps.assessments.models import Assessment, Choice, Question, Submission
+from apps.schools.models import School
+from apps.schools.services import onboard_school
 from apps.sessions.models import StudySession
 
 PASSWORD = "pass1234"
@@ -15,12 +17,27 @@ class Command(BaseCommand):
     help = "Create demo data for local development. Safe to re-run."
 
     def handle(self, *args, **options):
-        admin, _ = User.objects.get_or_create(
-            username="admin",
-            defaults={"email": "admin@yap.school", "is_staff": True, "is_superuser": True},
+        # platform staff: Django admin only, belongs to no school
+        platform, _ = User.objects.get_or_create(
+            username="platform",
+            defaults={"email": "platform@yap.school", "is_staff": True, "is_superuser": True},
         )
-        admin.set_password(PASSWORD)
-        admin.save()
+        platform.set_password(PASSWORD)
+        platform.save()
+
+        school = School.objects.filter(slug="demo-secondary-school").first()
+        if school is None:
+            school, _ = onboard_school(
+                name="Demo Secondary School",
+                system=School.System.NG,
+                admin={
+                    "username": "admin",
+                    "email": "admin@yap.school",
+                    "password": PASSWORD,
+                    "first_name": "Ngozi",
+                    "last_name": "Eze",
+                },
+            )
 
         def user(username, role, first, last):
             u, created = User.objects.get_or_create(
@@ -30,6 +47,7 @@ class Command(BaseCommand):
                     "role": role,
                     "first_name": first,
                     "last_name": last,
+                    "school": school,
                 },
             )
             if created:
@@ -40,15 +58,21 @@ class Command(BaseCommand):
         teacher1 = user("teacher1", User.Role.TEACHER, "Ada", "Obi")
         teacher2 = user("teacher2", User.Role.TEACHER, "Bode", "Ade")
         students = [user(f"student{i}", User.Role.STUDENT, "Kid", str(i)) for i in range(1, 6)]
+        parent1 = user("parent1", User.Role.PARENT, "Chidi", "Okafor")
+        Guardianship.objects.get_or_create(
+            parent=parent1, student=students[0], defaults={"relationship": "Father"}
+        )
 
         def subject(name):
-            s, _ = Subject.objects.get_or_create(name=name)
+            s, _ = Subject.objects.get_or_create(school=school, name=name)
             return s
 
         math, english, science = subject("Mathematics"), subject("English"), subject("Science")
 
         def classroom(name, created_by):
-            c, _ = Classroom.objects.get_or_create(name=name, defaults={"created_by": created_by})
+            c, _ = Classroom.objects.get_or_create(
+                school=school, name=name, defaults={"created_by": created_by}
+            )
             return c
 
         grade8a = classroom("Grade 8A", teacher1)
@@ -154,4 +178,6 @@ class Command(BaseCommand):
         )
 
         self.stdout.write(self.style.SUCCESS("Seed complete. Logins (password pass1234):"))
-        self.stdout.write("  admin / teacher1 / teacher2 / student1..student5")
+        self.stdout.write("  school admin: admin   teachers: teacher1, teacher2")
+        self.stdout.write("  students: student1..student5   parent: parent1 (of student1)")
+        self.stdout.write("  platform (Django admin only): platform")
