@@ -101,6 +101,24 @@ class TermSerializer(SameSchoolSerializerMixin, serializers.ModelSerializer):
         # terms come from the session; only their name and dates are edited
         read_only_fields = ["session", "order", "is_current"]
 
+    def validate(self, attrs):
+        term = self.instance
+        starts = attrs.get("starts_on", term.starts_on if term else None)
+        ends = attrs.get("ends_on", term.ends_on if term else None)
+        if starts and ends and ends <= starts:
+            raise serializers.ValidationError({"ends_on": "Must be after starts_on."})
+        session = term.session if term else None
+        if session is not None:
+            if session.starts_on and starts and starts < session.starts_on:
+                raise serializers.ValidationError(
+                    {"starts_on": f"The session starts on {session.starts_on}."}
+                )
+            if session.ends_on and ends and ends > session.ends_on:
+                raise serializers.ValidationError(
+                    {"ends_on": f"The session ends on {session.ends_on}."}
+                )
+        return attrs
+
 
 class AcademicSessionSerializer(SameSchoolSerializerMixin, serializers.ModelSerializer):
     terms = TermSerializer(many=True, read_only=True)
