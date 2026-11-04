@@ -1,17 +1,21 @@
 from django.contrib.auth.password_validation import validate_password
 from django.core.exceptions import ValidationError as DjangoValidationError
 from django.db import transaction
+from django.http import HttpResponse
 from drf_spectacular.utils import extend_schema
 from rest_framework import generics, viewsets
 from rest_framework.decorators import action
 from rest_framework.exceptions import ValidationError
+from rest_framework.parsers import FormParser, MultiPartParser
 from rest_framework.response import Response
 from rest_framework.throttling import ScopedRateThrottle
 from rest_framework.views import APIView
 from rest_framework_simplejwt.tokens import RefreshToken
 from rest_framework_simplejwt.views import TokenBlacklistView, TokenObtainPairView
 
-from . import openapi
+from apps.academics.rules import current_session
+
+from . import bulk_import, openapi
 from .access import InUse, RolePermissionsMixin, SchoolScopedMixin
 from .activation import check_code, issue_codes
 from .authentication import can_sign_in, end_sessions
@@ -64,6 +68,50 @@ class ActivateView(APIView):
         end_sessions(user)  # a reissued code doubles as a reset: other sessions end
         refresh = RefreshToken.for_user(user)
         return Response({"access": str(refresh.access_token), "refresh": str(refresh)})
+
+
+class ImportPeopleView(APIView):
+    """POST multipart {file, commit?}: import students, teachers and parents from a CSV.
+
+    Without commit (the default) nothing is written: the file is checked and every problem is
+    listed by spreadsheet row, with the usernames that would be created. With commit=true and
+    a valid file, everyone is created at once: students enrolled in their class this session,
+    parents linked to their children, and each person given an activation code (returned
+    once, for printing on login slips). An invalid file is a 400 and nothing is written.
+    """
+
+    permission_classes = [IsAdmin]
+    parser_classes = [MultiPartParser, FormParser]
+
+    @extend_schema(
+        request={"multipart/form-data": openapi.ImportRequestSerializer},
+        responses={200: openapi.ImportResultSerializer, 400: openapi.ImportResultSerializer},
+    )
+    def post(self, request):
+        params = openapi.ImportRequestSerializer(data=request.data)
+        params.is_valid(raise_exception=True)
+        school = request.user.school
+        session = current_session(school.pk)
+        rows, ignored = bulk_import.parse(params.validated_data["file"])
+        valid = bulk_import.validate(rows, school, session)
+        if not params.validated_data["commit"]:
+            return Response(bulk_import.report(rows, ignored, committed=False))
+        if not valid:
+            return Response(bulk_import.report(rows, ignored, committed=False), status=400)
+        codes = bulk_import.commit(rows, school, session, request.user)
+        return Response(bulk_import.report(rows, ignored, committed=True, codes=codes))
+
+
+class ImportTemplateView(APIView):
+    """GET: an example CSV with every column the import understands."""
+
+    permission_classes = [IsAdmin]
+
+    @extend_schema(responses={(200, "text/csv"): str})
+    def get(self, request):
+        response = HttpResponse(bulk_import.TEMPLATE, content_type="text/csv")
+        response["Content-Disposition"] = 'attachment; filename="yap-people-template.csv"'
+        return response
 
 
 class LogoutView(TokenBlacklistView):
