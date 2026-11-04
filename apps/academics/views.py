@@ -1,4 +1,5 @@
 from django.db.models import F
+from drf_spectacular.utils import extend_schema
 from rest_framework import mixins, viewsets
 from rest_framework.decorators import action
 from rest_framework.exceptions import ValidationError
@@ -15,6 +16,7 @@ from apps.accounts.access import (
 from apps.accounts.permissions import IsAdmin, IsStudent
 from apps.assessments.models import Assessment, Submission
 
+from . import openapi
 from .aggregates import count_per, one_decimal, score_pct_per
 from .models import (
     AcademicSession,
@@ -233,6 +235,9 @@ class ProgressView(APIView):
     class (or ?classroom=<id>).
     """
 
+    @extend_schema(
+        parameters=[openapi.ProgressQuerySerializer], responses=openapi.ProgressSerializer
+    )
     def get(self, request):
         user = request.user
         school_id = user.school_id

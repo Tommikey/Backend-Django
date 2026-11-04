@@ -1,3 +1,4 @@
+from drf_spectacular.utils import extend_schema
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
@@ -8,6 +9,7 @@ from apps.accounts.permissions import IsAdmin
 from apps.assessments.models import Assessment, Submission
 from apps.live_classes.models import LiveClass
 
+from . import openapi
 from .aggregates import count_per, one_decimal, score_pct_per
 
 
@@ -16,6 +18,7 @@ class StatsView(APIView):
 
     permission_classes = [IsAdmin]
 
+    @extend_schema(responses=openapi.StatsSerializer)
     def get(self, request):
         school_id = request.user.school_id
         in_school = {"classroom__school_id": school_id}

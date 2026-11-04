@@ -1,3 +1,4 @@
+from drf_spectacular.utils import extend_schema
 from rest_framework import generics, viewsets
 from rest_framework.exceptions import ValidationError
 from rest_framework.response import Response
@@ -6,6 +7,7 @@ from rest_framework.views import APIView
 from rest_framework_simplejwt.tokens import RefreshToken
 from rest_framework_simplejwt.views import TokenBlacklistView, TokenObtainPairView
 
+from . import openapi
 from .access import InUse, RolePermissionsMixin, SchoolScopedMixin
 from .authentication import end_sessions
 from .models import Guardianship, User
@@ -38,6 +40,7 @@ class PasswordChangeView(APIView):
     throttle_classes = [ScopedRateThrottle]
     throttle_scope = "password"
 
+    @extend_schema(request=PasswordChangeSerializer, responses=openapi.TokenPairSerializer)
     def post(self, request):
         serializer = PasswordChangeSerializer(data=request.data, context={"request": request})
         serializer.is_valid(raise_exception=True)

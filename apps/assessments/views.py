@@ -58,7 +58,8 @@ class AssessmentViewSet(
     def get_serializer_class(self):
         if self.action == "submit":
             return SubmitSerializer
-        if self.request.user.role == "student":
+        # getattr: the API schema generator asks with an anonymous user
+        if getattr(self.request.user, "role", None) == "student":
             return AssessmentStudentSerializer
         return AssessmentSerializer
 

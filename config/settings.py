@@ -39,6 +39,7 @@ INSTALLED_APPS = [
     "rest_framework_simplejwt",
     "rest_framework_simplejwt.token_blacklist",
     "corsheaders",
+    "drf_spectacular",
     # local
     "apps.schools",
     "apps.accounts",
@@ -94,6 +95,7 @@ AUTH_PASSWORD_VALIDATORS = [
 REST_FRAMEWORK = {
     "DEFAULT_AUTHENTICATION_CLASSES": ("apps.accounts.authentication.JWTAuthentication",),
     "DEFAULT_PERMISSION_CLASSES": ("rest_framework.permissions.IsAuthenticated",),
+    "DEFAULT_SCHEMA_CLASS": "drf_spectacular.openapi.AutoSchema",
     "DEFAULT_PAGINATION_CLASS": "rest_framework.pagination.PageNumberPagination",
     "PAGE_SIZE": 50,
     "DEFAULT_THROTTLE_CLASSES": (
@@ -123,6 +125,19 @@ SIMPLE_JWT = {
     "BLACKLIST_AFTER_ROTATION": True,
     # tokens carry a hash of the password: changing it ends every existing session
     "CHECK_REVOKE_TOKEN": True,
+}
+
+SPECTACULAR_SETTINGS = {
+    "TITLE": "YAP School Platform API",
+    "DESCRIPTION": (
+        "Multi-school API: school setup, the school year, lessons, assessments, live classes, "
+        "attendance and term results. Authenticate with `POST /api/v1/auth/token/` and send "
+        "`Authorization: Bearer <access>`."
+    ),
+    "VERSION": "1.0.0",
+    "SERVE_INCLUDE_SCHEMA": False,
+    "COMPONENT_SPLIT_REQUEST": True,  # separate request/response shapes (write-only fields)
+    "SCHEMA_PATH_PREFIX": r"/api/v1",
 }
 
 CORS_ALLOW_ALL_ORIGINS = env("CORS_ALLOW_ALL_ORIGINS")
