@@ -11,6 +11,20 @@ PASSWORD = "Yap-Dev-Pass-9!"  # must pass Django's common-password validator
 
 
 @pytest.fixture(autouse=True)
+def _fresh_rate_limits():
+    # throttle counters live in the cache; don't let them leak between tests
+    from django.core.cache import cache
+
+    cache.clear()
+
+
+@pytest.fixture(autouse=True)
+def _plain_http(settings):
+    # CI runs with DEBUG=False, which turns on HTTPS redirects; the test client speaks HTTP
+    settings.SECURE_SSL_REDIRECT = False
+
+
+@pytest.fixture(autouse=True)
 def _fast_password_hashing(settings):
     # the production hasher is deliberately slow; tests don't need that
     settings.PASSWORD_HASHERS = ["django.contrib.auth.hashers.MD5PasswordHasher"]
@@ -138,3 +152,50 @@ def auth(api):
 def results(payload):
     """Unwrap paginated list responses."""
     return payload["results"] if isinstance(payload, dict) and "results" in payload else payload
+
+
+# --- checking responses against the API docs ------------------------------------------------
+
+
+@pytest.fixture(scope="session")
+def spec():
+    """The generated OpenAPI schema, for checking responses against the docs (``check``)."""
+    from drf_spectacular.generators import SchemaGenerator
+
+    return SchemaGenerator().get_schema(request=None, public=True)
+
+
+def resolve(spec, schema):
+    while "$ref" in schema:
+        schema = spec["components"]["schemas"][schema["$ref"].split("/")[-1]]
+    if "allOf" in schema:  # a nullable $ref is wrapped as allOf + nullable
+        merged = resolve(spec, schema["allOf"][0])
+        return {**merged, "nullable": schema.get("nullable", False)}
+    return schema
+
+
+def check(spec, schema, value, where="$"):
+    schema = resolve(spec, schema)
+    if value is None:
+        assert schema.get("nullable"), f"{where} is null but not documented as nullable"
+        return
+    if "properties" in schema:
+        assert isinstance(value, dict), where
+        documented, actual = set(schema["properties"]), set(value)
+        assert actual == documented, (
+            f"{where}: undocumented {actual - documented}, missing {documented - actual}"
+        )
+        for key, sub in schema["properties"].items():
+            check(spec, sub, value[key], f"{where}.{key}")
+    elif schema.get("type") == "array":
+        assert isinstance(value, list), where
+        for i, item in enumerate(value[:3]):
+            check(spec, schema["items"], item, f"{where}[{i}]")
+    elif isinstance(schema.get("additionalProperties"), dict):
+        for key, item in value.items():
+            check(spec, schema["additionalProperties"], item, f"{where}[{key}]")
+
+
+def response_schema(spec, path, method, status):
+    op = spec["paths"][f"/api/v1/{path}"][method]
+    return op["responses"][str(status)]["content"]["application/json"]["schema"]

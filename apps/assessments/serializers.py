@@ -1,6 +1,7 @@
 from rest_framework import serializers
 
 from apps.academics.serializers import TeachingScopeSerializerMixin, term_field
+from apps.academics.validators import UPLOAD_VALIDATORS
 from apps.accounts.access import SameSchoolSerializerMixin
 
 from .models import Answer, Assessment, Choice, Question, Submission
@@ -70,13 +71,24 @@ class AssessmentSerializer(
 
     def validate(self, attrs):
         attrs = super().validate(attrs)
-        # create only: update() drops questions, so don't enforce there
-        if (
-            self.instance is None
-            and attrs.get("type") == Assessment.Type.QUIZ
-            and not attrs.get("questions")
-        ):
-            raise serializers.ValidationError("A quiz needs at least one question.")
+        if self.instance is not None:
+            # a quiz's questions and grading depend on its type
+            if "type" in attrs and attrs["type"] != self.instance.type:
+                raise serializers.ValidationError({"type": "The type can't be changed."})
+            return attrs  # update() leaves questions alone
+        if attrs.get("type") == Assessment.Type.QUIZ:
+            questions = attrs.get("questions")
+            if not questions:
+                raise serializers.ValidationError("A quiz needs at least one question.")
+            errors = []
+            for i, question in enumerate(questions, 1):
+                choices = question.get("choices", [])
+                if len(choices) < 2:
+                    errors.append(f"Question {i}: give at least two choices.")
+                elif sum(1 for c in choices if c.get("is_correct")) != 1:
+                    errors.append(f"Question {i}: mark exactly one choice correct.")
+            if errors:
+                raise serializers.ValidationError({"questions": errors})
         return attrs
 
     # shortcut: questions are writable on create only; update patches basic fields
@@ -116,7 +128,7 @@ class AnswerInputSerializer(serializers.Serializer):
 class SubmitSerializer(serializers.Serializer):
     answers = AnswerInputSerializer(many=True, required=False)
     text = serializers.CharField(required=False, allow_blank=True)
-    file = serializers.FileField(required=False)
+    file = serializers.FileField(required=False, validators=UPLOAD_VALIDATORS)
 
     def validate(self, attrs):
         assessment = self.context["assessment"]
@@ -162,6 +174,7 @@ class SubmissionSerializer(serializers.ModelSerializer):
     assessment_type = serializers.CharField(source="assessment.type", read_only=True)
     max_points = serializers.IntegerField(source="assessment.max_points", read_only=True)
     student_name = serializers.CharField(source="student.display_name", read_only=True)
+    is_late = serializers.SerializerMethodField()
 
     class Meta:
         model = Submission
@@ -178,9 +191,14 @@ class SubmissionSerializer(serializers.ModelSerializer):
             "file",
             "score",
             "submitted_at",
+            "is_late",
             "graded_at",
         ]
         read_only_fields = fields
+
+    def get_is_late(self, submission) -> bool:
+        due = submission.assessment.due_at
+        return due is not None and submission.submitted_at > due
 
 
 class GradeSerializer(serializers.ModelSerializer):

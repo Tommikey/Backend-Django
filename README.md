@@ -34,7 +34,10 @@ Built with Django 5.2, Django REST Framework, JWT auth (SimpleJWT) and PostgreSQ
 - **Parents** see their linked children, their attendance and their published report cards.
 - **Schools are isolated.** Another school's data behaves as if it doesn't exist; IDs from other
   schools are rejected as unknown, not forbidden.
-- **Platform staff** (superusers) use the Django admin only and belong to no school.
+- **Platform staff** (superusers) use the Django admin only and belong to no school. They can
+  suspend a school (`is_active`), which signs out all of its users at once.
+- **Records are kept.** People with school records (classes, marks, attendance, work) can't be
+  deleted, only deactivated, and a role can't change after an account is created.
 
 ### Results in brief
 
@@ -76,7 +79,9 @@ python manage.py seed         # safe to re-run
 python manage.py runserver
 ```
 
-The API is at `http://localhost:8000/api/v1/` and the Django admin at `http://localhost:8000/admin/`.
+The API is at `http://localhost:8000/api/v1/`, its interactive docs at
+`http://localhost:8000/api/docs/` (OpenAPI schema at `/api/schema/`), and the Django admin at
+`http://localhost:8000/admin/`.
 
 ### Demo accounts
 
@@ -105,15 +110,28 @@ curl -X POST localhost:8000/api/v1/auth/token/ \
 curl localhost:8000/api/v1/auth/me/ -H 'Authorization: Bearer <access>'
 ```
 
-Access tokens last 1 hour; refresh them at `POST /api/v1/auth/token/refresh/`. List endpoints are
-paginated (50 per page). Endpoints that work on a term default to the school's current term when
-`term` is left out.
+Access tokens last 1 hour. Refresh them at `POST /api/v1/auth/token/refresh/`, which also returns
+a new refresh token (the old one stops working). `POST auth/logout/` with `{"refresh": ...}` ends a
+device's session. `POST auth/password/` with `current_password` and `new_password` changes your
+own password and returns fresh tokens. Any password change, including an admin reset, signs the
+person out everywhere else.
+
+`GET auth/me/` returns your profile plus everything a client needs to start: the school's
+settings, the current session and term, and your working context (a teacher's classes, a
+student's class, a parent's children). `GET dashboard/` returns what your role should see first:
+missing registers, work to grade or due, upcoming live classes, attendance, the latest report card.
+
+List endpoints are paginated (50 per page; `?page_size=` up to 200) and most take `?search=`
+and `?ordering=` (see the docs for each list's fields). Endpoints that work on a term default to the school's
+current term when `term` is left out. Login is limited to 10 attempts a minute per username, and
+school sign-up to 10 an hour per IP; going over returns `429`.
 
 All routes are under `/api/v1/`:
 
 | Area | Routes |
 | --- | --- |
-| Auth | `auth/token/`, `auth/token/refresh/`, `auth/me/` |
+| Auth | `auth/token/`, `auth/token/refresh/`, `auth/logout/`, `auth/password/`, `auth/me/` |
+| Dashboard | `dashboard/` |
 | Schools | `schools/onboard/`, `schools/me/`, `schools/levels/`, `schools/components/`, `schools/grade-bands/` |
 | People | `users/`, `guardianships/` |
 | School year | `academics/academic-sessions/`, `academics/terms/`, `academics/subjects/`, `academics/classrooms/`, `academics/teaching-assignments/`, `academics/enrollments/` |
@@ -126,7 +144,7 @@ All routes are under `/api/v1/`:
 ## Project layout
 
 ```
-config/            settings, root URLs
+config/            settings, root URLs, health check
 apps/
   schools/         schools (tenants), onboarding, per-system presets, levels, score split, grade scale
   accounts/        custom User with roles, parent links, shared access-control mixins, seed command
@@ -135,6 +153,7 @@ apps/
   live_classes/    scheduled online classes
   results/         scores, comments, results maths, publishing, report cards
   attendance/      daily class register, term attendance counts
+  dashboard/       what each role sees first
 conftest.py        shared pytest fixtures
 ```
 
@@ -146,8 +165,44 @@ ruff check .            # lint
 ruff format .           # format
 ```
 
-Configuration comes from `.env` (see `.env.example`): `SECRET_KEY`, `DEBUG`, `DATABASE_URL`,
-`ALLOWED_HOSTS` and `CORS_ALLOW_ALL_ORIGINS`. Never commit `.env`.
+Configuration comes from `.env` (see `.env.example`). Never commit `.env`.
+
+| Setting | Default | Notes |
+| --- | --- | --- |
+| `SECRET_KEY` | (required) | Long and random in production |
+| `DATABASE_URL` | (required) | |
+| `DEBUG` | `False` | Turn on for local development only |
+| `ALLOWED_HOSTS` | `localhost,127.0.0.1` | |
+| `CORS_ALLOWED_ORIGINS` | empty | The frontend's origin(s), e.g. `https://app.example.com` |
+| `CORS_ALLOW_ALL_ORIGINS` | `False` | Local development only |
+| `CSRF_TRUSTED_ORIGINS` | empty | The Django admin's `https://` origin |
+| `SECURE_SSL_REDIRECT` | `True` | With `DEBUG=False`: redirect HTTP to HTTPS |
+| `SECURE_HSTS_SECONDS` | 30 days | With `DEBUG=False` |
+| `NUM_PROXIES` | `0` | Proxies in front of the app (e.g. `1` behind a load balancer), so rate limits see real client IPs |
+| `LOG_LEVEL` | `INFO` | Logs go to stdout |
+
+### Deploying with Docker
+
+```bash
+cp .env.prod.example .env.prod        # fill in secrets, hosts and origins
+docker compose -f docker-compose.prod.yml up -d --build
+```
+
+This runs Postgres, applies migrations once, then starts the API under gunicorn on port 8000
+(`WEB_CONCURRENCY` workers) as a non-root user. Uploaded files live in the `media` volume.
+`GET /healthz/` answers 200 when the app can reach its database (503 otherwise); it needs no
+login and isn't redirected to HTTPS, so load balancers can probe it. Their probes must still use
+a host listed in `ALLOWED_HOSTS`.
+
+### Production notes
+
+- Run behind a proxy that terminates TLS and sets `X-Forwarded-Proto`. Run
+  `python manage.py collectstatic` at build time; WhiteNoise serves the admin's assets.
+- Rate limits are counted in Django's cache. The default in-memory cache is per process, so with
+  several gunicorn workers, point `CACHES` at Redis to make the limits exact.
+- Uploaded files (lessons, submissions) go to `MEDIA_ROOT` and aren't served by Django when
+  `DEBUG=False`. Private file storage is on the roadmap.
+- CI runs `manage.py check --deploy`, fails on any API docs warning, and builds the Docker image.
 
 ## License
 

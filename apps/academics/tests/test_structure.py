@@ -1,5 +1,7 @@
 """Setting up the school year: sessions and terms, classes, who teaches what, who is where."""
 
+from datetime import date
+
 import pytest
 
 from apps.academics.models import AcademicSession, Enrollment, Lesson, Subject, Term
@@ -203,3 +205,19 @@ def test_subject_in_use_cannot_be_deleted(auth, admin_user, kit):
     assert (
         auth(admin_user).delete(f"/api/v1/academics/subjects/{kit.subject.pk}/").status_code == 409
     )
+
+
+def test_term_dates_are_checked(auth, admin_user, school):
+    session = school.academic_sessions.get(is_current=True)
+    session.starts_on, session.ends_on = date(2025, 9, 1), date(2026, 7, 31)
+    session.save()
+    url = f"{TERMS_URL}{session.terms.get(order=1).pk}/"
+    client = auth(admin_user)
+    backwards = client.patch(url, {"starts_on": "2025-12-12", "ends_on": "2025-09-08"})
+    assert backwards.status_code == 400 and "ends_on" in backwards.json()
+    early = client.patch(url, {"starts_on": "2025-08-01"})
+    assert early.status_code == 400 and "starts_on" in early.json()
+    late = client.patch(url, {"ends_on": "2026-08-15"})
+    assert late.status_code == 400
+    ok = client.patch(url, {"starts_on": "2025-09-08", "ends_on": "2025-12-12"})
+    assert ok.status_code == 200, ok.content

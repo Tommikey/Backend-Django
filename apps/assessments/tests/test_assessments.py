@@ -69,8 +69,9 @@ def test_only_the_subjects_teacher_creates_quizzes(auth, kit):
 def test_only_the_subjects_teacher_edits_quizzes(auth, kit, admin_user):
     quiz = create_quiz(auth(kit.teacher), kit)
     url = f"{ASSESSMENTS_URL}{quiz.pk}/"
-    assert auth(kit.other_teacher).patch(url, {"title": "X"}, format="json").status_code == 403
-    assert auth(kit.other_teacher).delete(url).status_code == 403
+    # other teachers don't see the quiz at all (it carries the answer key)
+    assert auth(kit.other_teacher).patch(url, {"title": "X"}, format="json").status_code == 404
+    assert auth(kit.other_teacher).delete(url).status_code == 404
     assert auth(kit.teacher).patch(url, {"title": "Y"}, format="json").status_code == 200
     assert auth(admin_user).delete(url).status_code == 204
 
@@ -211,9 +212,92 @@ def test_admin_grades_anything(auth, kit, admin_user):
     assert r.status_code == 200 and r.data["score"] == 6
 
 
-def test_assessments_filter_by_classroom(auth, kit):
+def test_assessments_filter_by_classroom(auth, kit, admin_user):
     make_assignment(kit)
     other_class = make_classroom(kit.school, "B")
     make_assignment(kit, "B work", classroom=other_class)
-    rows = results(auth(kit.teacher).get(f"{ASSESSMENTS_URL}?classroom={other_class.pk}").json())
+    rows = results(auth(admin_user).get(f"{ASSESSMENTS_URL}?classroom={other_class.pk}").json())
     assert [a["title"] for a in rows] == ["B work"]
+
+
+# --- uploads ---------------------------------------------------------------------------------
+
+
+def test_submission_files_are_checked(auth, kit, settings, tmp_path):
+    from django.core.files.uploadedfile import SimpleUploadedFile
+
+    settings.MEDIA_ROOT = tmp_path
+    essay = make_assignment(kit)
+    url = f"{ASSESSMENTS_URL}{essay.pk}/submit/"
+    client = auth(kit.student)
+
+    script = SimpleUploadedFile("essay.exe", b"MZ...", content_type="application/octet-stream")
+    r = client.post(url, {"file": script}, format="multipart")
+    assert r.status_code == 400 and "file" in r.json()
+
+    huge = SimpleUploadedFile("essay.pdf", b"0" * (10 * 1024 * 1024 + 1))
+    r = client.post(url, {"file": huge}, format="multipart")
+    assert r.status_code == 400 and "10 MB" in str(r.json())
+
+    ok = SimpleUploadedFile("essay.pdf", b"%PDF-1.7 ...", content_type="application/pdf")
+    assert client.post(url, {"file": ok}, format="multipart").status_code == 201
+
+
+# --- integrity -------------------------------------------------------------------------------
+
+
+def test_answer_keys_only_for_what_you_teach(auth, kit):
+    quiz = create_quiz(auth(kit.teacher), kit)
+    others = results(auth(kit.other_teacher).get(ASSESSMENTS_URL).json())
+    assert others == []
+    assert auth(kit.other_teacher).get(f"{ASSESSMENTS_URL}{quiz.pk}/").status_code == 404
+    # the class's form teacher can see its work
+    kit.classroom.form_teacher = kit.other_teacher
+    kit.classroom.save()
+    assert len(results(auth(kit.other_teacher).get(ASSESSMENTS_URL).json())) == 1
+
+
+def test_quiz_questions_need_a_single_right_answer(auth, kit):
+    def payload(choices):
+        question = {"text": "Q", "choices": choices}
+        return {
+            **QUIZ_PAYLOAD,
+            "questions": [question],
+            "classroom": kit.classroom.pk,
+            "subject": kit.subject.pk,
+        }
+
+    client = auth(kit.teacher)
+    one_choice = payload([{"text": "a", "is_correct": True}])
+    none_right = payload([{"text": "a", "is_correct": False}, {"text": "b", "is_correct": False}])
+    two_right = payload([{"text": "a", "is_correct": True}, {"text": "b", "is_correct": True}])
+    for body in (one_choice, none_right, two_right):
+        r = client.post(ASSESSMENTS_URL, body, format="json")
+        assert r.status_code == 400 and "questions" in r.json(), r.content
+
+
+def test_assessment_type_is_fixed(auth, kit):
+    quiz = create_quiz(auth(kit.teacher), kit)
+    r = auth(kit.teacher).patch(f"{ASSESSMENTS_URL}{quiz.pk}/", {"type": "assignment"})
+    assert r.status_code == 400 and "type" in r.json()
+    r = auth(kit.teacher).patch(f"{ASSESSMENTS_URL}{quiz.pk}/", {"title": "Renamed"})
+    assert r.status_code == 200
+
+
+def test_late_submissions_are_flagged(auth, kit):
+    from datetime import timedelta
+
+    from django.utils import timezone
+
+    essay = make_assignment(kit)
+    essay.due_at = timezone.now() - timedelta(hours=1)
+    essay.save()
+    r = auth(kit.student).post(f"{ASSESSMENTS_URL}{essay.pk}/submit/", {"text": "Sorry, late"})
+    assert r.status_code == 201 and r.json()["is_late"] is True
+
+
+def test_search_stays_inside_what_you_may_see(auth, kit):
+    create_quiz(auth(kit.teacher), kit)  # "Algebra basics"
+    assert results(auth(kit.other_teacher).get(ASSESSMENTS_URL, {"search": "algebra"}).json()) == []
+    rows = results(auth(kit.teacher).get(ASSESSMENTS_URL, {"search": "algebra"}).json())
+    assert [a["title"] for a in rows] == ["Algebra basics"]

@@ -37,3 +37,12 @@ class LiveClassSerializer(
             "created_at",
         ]
         read_only_fields = ["hosted_by", "created_at"]
+
+    def validate(self, attrs):
+        attrs = super().validate(attrs)
+        live = self.instance
+        starts = attrs.get("starts_at", live.starts_at if live else None)
+        ends = attrs.get("ends_at", live.ends_at if live else None)
+        if starts and ends and ends <= starts:
+            raise serializers.ValidationError({"ends_at": "Must be after starts_at."})
+        return attrs

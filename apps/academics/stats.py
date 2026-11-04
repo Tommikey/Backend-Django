@@ -1,12 +1,16 @@
+from drf_spectacular.utils import extend_schema
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
-from apps.academics.models import Classroom, Lesson
+from apps.academics.models import Classroom, Enrollment, Lesson
 from apps.academics.rules import current_session
 from apps.accounts.models import User
 from apps.accounts.permissions import IsAdmin
 from apps.assessments.models import Assessment, Submission
 from apps.live_classes.models import LiveClass
+
+from . import openapi
+from .aggregates import count_per, one_decimal, score_pct_per
 
 
 class StatsView(APIView):
@@ -14,15 +18,11 @@ class StatsView(APIView):
 
     permission_classes = [IsAdmin]
 
+    @extend_schema(responses=openapi.StatsSerializer)
     def get(self, request):
         school_id = request.user.school_id
         in_school = {"classroom__school_id": school_id}
         submissions = Submission.objects.filter(assessment__classroom__school_id=school_id)
-        scored = [
-            s
-            for s in submissions.select_related("assessment")
-            if s.score is not None and s.assessment.max_points
-        ]
         users = User.objects.filter(school_id=school_id)
         counts = {
             "students": users.filter(role=User.Role.STUDENT).count(),
@@ -34,26 +34,33 @@ class StatsView(APIView):
             "submissions": submissions.count(),
             "live_classes": LiveClass.objects.filter(**in_school).count(),
         }
-        classrooms = []
         session = current_session(school_id)
-        for c in Classroom.objects.filter(school_id=school_id).select_related("level"):
-            class_scores = [s for s in scored if s.assessment.classroom_id == c.pk]
-            classrooms.append(
-                {
-                    "id": c.pk,
-                    "name": c.name,
-                    # students in the class this session
-                    "students": c.enrollments.filter(session=session).count(),
-                    "lessons": c.lessons.count(),
-                    "assessments": c.assessments.count(),
-                    "live_classes": c.live_classes.count(),
-                    "avg_score_pct": round(
-                        sum(s.score / s.assessment.max_points * 100 for s in class_scores)
-                        / len(class_scores),
-                        1,
-                    )
-                    if class_scores
-                    else None,
-                }
+        classrooms = (
+            Classroom.objects.filter(school_id=school_id)
+            .select_related("level")
+            .annotate(
+                # students in the class this session
+                n_students=count_per(Enrollment.objects.filter(session=session), "classroom"),
+                n_lessons=count_per(Lesson.objects.all(), "classroom"),
+                n_assessments=count_per(Assessment.objects.all(), "classroom"),
+                n_live_classes=count_per(LiveClass.objects.all(), "classroom"),
+                avg_pct=score_pct_per(Submission.objects.all(), "assessment__classroom"),
             )
-        return Response({"counts": counts, "classrooms": classrooms})
+        )
+        return Response(
+            {
+                "counts": counts,
+                "classrooms": [
+                    {
+                        "id": c.pk,
+                        "name": c.name,
+                        "students": c.n_students,
+                        "lessons": c.n_lessons,
+                        "assessments": c.n_assessments,
+                        "live_classes": c.n_live_classes,
+                        "avg_score_pct": one_decimal(c.avg_pct),
+                    }
+                    for c in classrooms
+                ],
+            }
+        )

@@ -1,0 +1,13 @@
+.git
+.github
+.venv
+.env
+.env.*
+!.env.example
+!.env.prod.example
+media
+staticfiles
+**/__pycache__
+.pytest_cache
+.ruff_cache
+docker-compose*.yml

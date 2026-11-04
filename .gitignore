@@ -419,3 +419,9 @@ FodyWeavers.xsd
 
 # Project
 media/
+staticfiles/
+
+# environment files (examples are committed)
+.env.*
+!.env.example
+!.env.prod.example

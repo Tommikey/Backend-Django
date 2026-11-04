@@ -68,3 +68,14 @@ def test_upcoming_filter(auth, kit):
     make_live_class(kit, "Future")
     upcoming = results(auth(kit.student).get(f"{URL}?upcoming=1").json())
     assert [s["title"] for s in upcoming] == ["Future"]
+
+
+def test_live_class_must_end_after_it_starts(auth, kit):
+    start = timezone.now() + timedelta(days=1)
+    body = payload(kit, ends_at=(start - timedelta(minutes=5)).isoformat())
+    body["starts_at"] = start.isoformat()
+    r = auth(kit.teacher).post(URL, body)
+    assert r.status_code == 400 and "ends_at" in r.json()
+    live = make_live_class(kit)
+    r = auth(kit.teacher).patch(f"{URL}{live.pk}/", {"ends_at": live.starts_at.isoformat()})
+    assert r.status_code == 400

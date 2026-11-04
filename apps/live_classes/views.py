@@ -25,6 +25,8 @@ class LiveClassViewSet(
     """Live classes. The subject's teacher (or an admin) schedules and edits them."""
 
     serializer_class = LiveClassSerializer
+    search_fields = ["title", "description"]
+    ordering_fields = ["starts_at", "created_at", "title"]
     queryset = LiveClass.objects.select_related(
         "classroom__level", "subject", "term", "hosted_by"
     ).order_by("starts_at")

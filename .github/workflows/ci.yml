@@ -57,5 +57,18 @@ jobs:
           python manage.py check
           python manage.py makemigrations --check --dry-run
 
+      - name: Deployment checks
+        env:
+          ALLOWED_HOSTS: api.example.com
+        run: python manage.py check --deploy --fail-level WARNING
+
       - name: Tests
         run: pytest -q
+
+  docker:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build the production image
+        run: docker build -t yap-api:ci .

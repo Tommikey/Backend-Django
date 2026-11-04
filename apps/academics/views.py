@@ -1,5 +1,8 @@
+from django.db.models import F
+from drf_spectacular.utils import extend_schema
 from rest_framework import mixins, viewsets
 from rest_framework.decorators import action
+from rest_framework.exceptions import ValidationError
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
@@ -13,6 +16,8 @@ from apps.accounts.access import (
 from apps.accounts.permissions import IsAdmin, IsStudent
 from apps.assessments.models import Assessment, Submission
 
+from . import openapi
+from .aggregates import count_per, one_decimal, score_pct_per
 from .models import (
     AcademicSession,
     Classroom,
@@ -48,10 +53,20 @@ class EveryoneReadsMixin(AudienceScopedMixin):
         return qs
 
 
+def id_param(params, name):
+    """?name=<id> as an int, None if absent; anything else is a 400, not a database error."""
+    value = params.get(name)
+    if not value:
+        return None
+    if not value.isdigit():
+        raise ValidationError({name: "Must be an ID (a whole number)."})
+    return int(value)
+
+
 def filter_by_params(qs, params, *names):
     """Apply ?name=<id> filters that the client sent, e.g. ?classroom=3&session=1."""
     for name in names:
-        if value := params.get(name):
+        if (value := id_param(params, name)) is not None:
             qs = qs.filter(**{f"{name}_id": value})
     return qs
 
@@ -114,6 +129,8 @@ class SubjectViewSet(
     viewsets.ModelViewSet,
 ):
     serializer_class = SubjectSerializer
+    search_fields = ["name"]
+    ordering_fields = ["name"]
     queryset = Subject.objects.order_by("name")
     write_permissions = (IsAdmin,)
 
@@ -128,6 +145,8 @@ class ClassroomViewSet(
     """Class arms (JSS2A). Admins manage them and pick form teachers."""
 
     serializer_class = ClassroomSerializer
+    search_fields = ["arm", "level__name", "form_teacher__first_name", "form_teacher__last_name"]
+    ordering_fields = ["level__order", "arm", "created_at"]
     queryset = Classroom.objects.select_related("level", "form_teacher")
     write_permissions = (IsAdmin,)
 
@@ -145,6 +164,8 @@ class TeachingAssignmentViewSet(
     """Who teaches which subject to which class, per session. ?mine=true for your own."""
 
     serializer_class = TeachingAssignmentSerializer
+    search_fields = ["subject__name", "teacher__first_name", "teacher__last_name"]
+    ordering_fields = ["classroom__level__order", "subject__name", "teacher__last_name"]
     queryset = TeachingAssignment.objects.select_related(
         "session", "classroom__level", "subject", "teacher"
     ).order_by("classroom__level__order", "classroom__arm", "subject__name")
@@ -165,6 +186,8 @@ class EnrollmentViewSet(
     """Which class each student is in, per session (one class per session)."""
 
     serializer_class = EnrollmentSerializer
+    search_fields = ["student__first_name", "student__last_name", "student__username"]
+    ordering_fields = ["created_at", "student__last_name", "student__first_name"]
     queryset = Enrollment.objects.select_related("session", "classroom__level", "student").order_by(
         "-created_at"
     )
@@ -191,6 +214,8 @@ class LessonViewSet(
     viewsets.ModelViewSet,
 ):
     serializer_class = LessonSerializer
+    search_fields = ["title", "content"]
+    ordering_fields = ["created_at", "title"]
     queryset = Lesson.objects.select_related(
         "classroom__level", "subject", "term", "created_by"
     ).order_by("-created_at")
@@ -220,10 +245,13 @@ class ProgressView(APIView):
     class (or ?classroom=<id>).
     """
 
+    @extend_schema(
+        parameters=[openapi.ProgressQuerySerializer], responses=openapi.ProgressSerializer
+    )
     def get(self, request):
         user = request.user
         school_id = user.school_id
-        session_id = request.query_params.get("session")
+        session_id = id_param(request.query_params, "session")
         session = (
             AcademicSession.objects.filter(school_id=school_id, pk=session_id).first()
             if session_id
@@ -243,41 +271,44 @@ class ProgressView(APIView):
             ) | classrooms.filter(form_teacher=user)
         elif user.role != "admin":
             classrooms = classrooms.none()
-        if classroom_id := request.query_params.get("classroom"):
+        if (classroom_id := id_param(request.query_params, "classroom")) is not None:
             classrooms = classrooms.filter(pk=classroom_id)
 
+        mine = {"student": user} if user.role == "student" else {}
+        in_session = {"term__session": session}
+        quizzes = Assessment.objects.filter(**in_session, type=Assessment.Type.QUIZ)
+        # quiz submissions in this session; a student sees just their own
+        quiz_work = Submission.objects.filter(
+            assessment__term__session=session, assessment__type=Assessment.Type.QUIZ, **mine
+        )
+        classrooms = classrooms.distinct().annotate(
+            n_students=count_per(Enrollment.objects.filter(session=session), "classroom"),
+            n_lessons=count_per(Lesson.objects.filter(**in_session), "classroom"),
+            # completions by students enrolled in the class that session
+            n_completed=count_per(
+                Completion.objects.filter(
+                    lesson__term__session=session,
+                    student__enrollments__session=session,
+                    student__enrollments__classroom=F("lesson__classroom"),
+                    **mine,
+                ),
+                "lesson__classroom",
+            ),
+            n_quizzes=count_per(quizzes, "classroom"),
+            n_submitted=count_per(quiz_work, "assessment__classroom"),
+            avg_pct=score_pct_per(quiz_work, "assessment__classroom"),
+        )
         data = [
-            self.classroom_progress(classroom, session, user) for classroom in classrooms.distinct()
+            {
+                "classroom": {"id": c.pk, "name": c.name},
+                "students": c.n_students,
+                "lessons": {"total": c.n_lessons, "completed": c.n_completed},
+                "quizzes": {
+                    "total": c.n_quizzes,
+                    "submitted": c.n_submitted,
+                    "avg_score_pct": one_decimal(c.avg_pct),
+                },
+            }
+            for c in classrooms
         ]
         return Response({"session": {"id": session.pk, "name": session.name}, "classrooms": data})
-
-    @staticmethod
-    def classroom_progress(classroom, session, user):
-        in_session = {"classroom": classroom, "term__session": session}
-        lessons = Lesson.objects.filter(**in_session)
-        completions = Completion.objects.filter(
-            lesson__in=lessons,
-            student__enrollments__classroom=classroom,
-            student__enrollments__session=session,
-        )
-        quizzes = Assessment.objects.filter(**in_session, type=Assessment.Type.QUIZ)
-        submissions = Submission.objects.filter(assessment__in=quizzes).select_related("assessment")
-        if user.role == "student":
-            completions = completions.filter(student=user)
-            submissions = submissions.filter(student=user)
-        scored = [s for s in submissions if s.score is not None and s.assessment.max_points]
-        avg = (
-            round(sum(s.score / s.assessment.max_points * 100 for s in scored) / len(scored), 1)
-            if scored
-            else None
-        )
-        return {
-            "classroom": {"id": classroom.pk, "name": classroom.name},
-            "students": classroom.enrollments.filter(session=session).count(),
-            "lessons": {"total": lessons.count(), "completed": completions.count()},
-            "quizzes": {
-                "total": quizzes.count(),
-                "submitted": submissions.count(),
-                "avg_score_pct": avg,
-            },
-        }

@@ -39,6 +39,8 @@ class AssessmentViewSet(
         .order_by("-created_at")
     )
     action_permissions = {"submit": (IsStudent,)}
+    search_fields = ["title", "description"]
+    ordering_fields = ["created_at", "due_at", "title"]
     write_object_permissions = (TeachesSubjectOrAdmin,)
     school_path = "classroom__school"
 
@@ -47,13 +49,19 @@ class AssessmentViewSet(
             super().get_queryset(), self.request.query_params, "classroom", "subject", "term"
         )
 
+    def scope_teacher(self, qs, user):
+        # quizzes carry their answer keys: only for what the teacher teaches, or their form
+        # class (the same rule as for reading submissions)
+        return qs.filter(teaching_exists(user) | Q(classroom__form_teacher=user))
+
     def scope_student(self, qs, user):
         return qs.filter(enrolled_exists(user))
 
     def get_serializer_class(self):
         if self.action == "submit":
             return SubmitSerializer
-        if self.request.user.role == "student":
+        # getattr: the API schema generator asks with an anonymous user
+        if getattr(self.request.user, "role", None) == "student":
             return AssessmentStudentSerializer
         return AssessmentSerializer
 
@@ -88,6 +96,13 @@ class SubmissionViewSet(
     only the subject's teacher (or an admin) grades."""
 
     serializer_class = SubmissionSerializer
+    search_fields = [
+        "student__first_name",
+        "student__last_name",
+        "student__username",
+        "assessment__title",
+    ]
+    ordering_fields = ["submitted_at", "graded_at", "score", "student__last_name"]
     queryset = (
         Submission.objects.select_related("assessment__term", "student")
         .prefetch_related("answers__question", "answers__choice")

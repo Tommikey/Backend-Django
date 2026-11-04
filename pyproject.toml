@@ -10,9 +10,11 @@ ignore = ["DJ001"]
 [tool.ruff.lint.per-file-ignores]
 "apps/*/migrations/*" = ["E501"]
 "apps/*/tests/*" = ["S101", "S105", "S106", "E501"]
-"conftest.py" = ["S105", "E501"]
+"conftest.py" = ["S101", "S105", "E501"]
 "apps/accounts/management/commands/seed.py" = ["S105"]
 
 [tool.pytest.ini_options]
 DJANGO_SETTINGS_MODULE = "config.settings"
 python_files = ["test_*.py"]
+# WhiteNoise expects collectstatic output, which tests don't need
+filterwarnings = ["ignore:No directory at:UserWarning"]
