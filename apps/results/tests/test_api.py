@@ -284,3 +284,17 @@ def test_marks_and_report_cards_block_deletes(auth, kit, admin_user):
     assert client.delete(class_url).status_code == 409
     assert client.delete(session_url).status_code == 409
     assert TermResult.objects.count() == 1
+
+
+def test_published_card_outlives_the_enrollment(auth, kit, admin_user, make_user):
+    # a student who leaves (enrollment removed) keeps their published report cards
+    enter(auth, kit, CA1=15, CA2=15, Exam=50)
+    parent = make_user("parent")
+    Guardianship.objects.create(parent=parent, student=kit.student)
+    assert auth(admin_user).post(PUBLISH_URL, {}).status_code == 201
+    kit.student.enrollments.all().delete()
+
+    for reader in (kit.student, parent, admin_user):
+        r = auth(reader).get(CARD_URL, {"student": kit.student.pk})
+        assert r.status_code == 200, (reader.role, r.content)
+        assert r.json()["published"] is True

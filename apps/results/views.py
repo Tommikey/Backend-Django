@@ -210,11 +210,9 @@ class ReportCardView(APIView):
         student = data.get("student") or (user if user.role == User.Role.STUDENT else None)
         if student is None:
             raise NotFound("Say which student (?student=<id>).")
-        enrollment = enrollment_for(student, term.session)
-        if enrollment is None:
-            raise NotFound("No report card for this student and term.")
-        classroom = enrollment.classroom
 
+        # a published card stands on its own: it stays readable after the student leaves
+        # the class, so it is looked up (and authorised) by the class stored on it
         publication = Publication.objects.filter(term=term).first()
         if publication is not None:
             result = (
@@ -227,6 +225,10 @@ class ReportCardView(APIView):
                 raise NotFound("No report card for this student and term.")
             return Response(report_cards.from_snapshot(result, publication))
 
+        enrollment = enrollment_for(student, term.session)
+        if enrollment is None:
+            raise NotFound("No report card for this student and term.")
+        classroom = enrollment.classroom
         if can_review_class(user, classroom):
             return Response(report_cards.live(student, classroom, term))
         raise NotFound("Results for this term are not published yet.")

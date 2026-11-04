@@ -268,3 +268,14 @@ def test_register_blocks_deleting_a_class(auth, form_kit, admin_user):
     take(auth, kit, DAY1, student="present")
     r = auth(admin_user).delete(f"/api/v1/academics/classrooms/{kit.classroom.pk}/")
     assert r.status_code == 409
+
+
+def test_attendance_outlives_the_enrollment(auth, form_kit, admin_user):
+    kit = form_kit
+    take(auth, kit, DAY1, student="absent")
+    kit.student.enrollments.all().delete()
+    for reader in (kit.student, kit.teacher, admin_user):
+        r = auth(reader).get(STUDENT_URL, {"student": kit.student.pk})
+        assert r.status_code == 200, (reader.role, r.content)
+        assert r.json()["summary"]["absent"] == 1
+    assert auth(kit.other_teacher).get(STUDENT_URL, {"student": kit.student.pk}).status_code == 404
