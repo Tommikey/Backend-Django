@@ -1,5 +1,6 @@
 from rest_framework import serializers
 
+from apps.academics.serializers import TeachingScopeSerializerMixin, term_field
 from apps.accounts.access import SameSchoolSerializerMixin
 
 from .models import Answer, Assessment, Choice, Question, Submission
@@ -33,11 +34,17 @@ class QuestionStudentSerializer(serializers.ModelSerializer):
         fields = ["id", "text", "points", "choices"]
 
 
-class AssessmentSerializer(SameSchoolSerializerMixin, serializers.ModelSerializer):
+class AssessmentSerializer(
+    TeachingScopeSerializerMixin, SameSchoolSerializerMixin, serializers.ModelSerializer
+):
     questions = QuestionSerializer(many=True, required=False)
+    term = term_field()
+    term_name = serializers.CharField(source="term.name", read_only=True)
     classroom_name = serializers.CharField(source="classroom.name", read_only=True)
     subject_name = serializers.CharField(source="subject.name", read_only=True)
-    created_by_name = serializers.CharField(source="created_by.get_full_name", read_only=True)
+    created_by_name = serializers.CharField(
+        source="created_by.display_name", read_only=True, default=None
+    )
 
     class Meta:
         model = Assessment
@@ -50,6 +57,8 @@ class AssessmentSerializer(SameSchoolSerializerMixin, serializers.ModelSerialize
             "classroom_name",
             "subject",
             "subject_name",
+            "term",
+            "term_name",
             "created_by",
             "created_by_name",
             "due_at",
@@ -60,6 +69,7 @@ class AssessmentSerializer(SameSchoolSerializerMixin, serializers.ModelSerialize
         read_only_fields = ["created_by", "created_at"]
 
     def validate(self, attrs):
+        attrs = super().validate(attrs)
         # create only: update() drops questions, so don't enforce there
         if (
             self.instance is None
@@ -151,7 +161,7 @@ class SubmissionSerializer(serializers.ModelSerializer):
     assessment_title = serializers.CharField(source="assessment.title", read_only=True)
     assessment_type = serializers.CharField(source="assessment.type", read_only=True)
     max_points = serializers.IntegerField(source="assessment.max_points", read_only=True)
-    student_name = serializers.CharField(source="student.get_full_name", read_only=True)
+    student_name = serializers.CharField(source="student.display_name", read_only=True)
 
     class Meta:
         model = Submission

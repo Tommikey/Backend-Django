@@ -3,18 +3,26 @@ from rest_framework.routers import DefaultRouter
 
 from .stats import StatsView
 from .views import (
+    AcademicSessionViewSet,
     ClassroomViewSet,
     EnrollmentViewSet,
     LessonViewSet,
     ProgressView,
     SubjectViewSet,
+    TeachingAssignmentViewSet,
+    TermViewSet,
 )
 
 app_name = "academics"
 
 router = DefaultRouter()
+router.register("academics/academic-sessions", AcademicSessionViewSet, basename="academic-session")
+router.register("academics/terms", TermViewSet, basename="term")
 router.register("academics/subjects", SubjectViewSet, basename="subject")
 router.register("academics/classrooms", ClassroomViewSet, basename="classroom")
+router.register(
+    "academics/teaching-assignments", TeachingAssignmentViewSet, basename="teaching-assignment"
+)
 router.register("academics/enrollments", EnrollmentViewSet, basename="enrollment")
 router.register("academics/lessons", LessonViewSet, basename="lesson")
 

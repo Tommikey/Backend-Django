@@ -69,8 +69,8 @@ class SchoolUserSerializer(serializers.ModelSerializer):
 
 
 class GuardianshipSerializer(SameSchoolSerializerMixin, serializers.ModelSerializer):
-    parent_name = serializers.CharField(source="parent.get_full_name", read_only=True)
-    student_name = serializers.CharField(source="student.get_full_name", read_only=True)
+    parent_name = serializers.CharField(source="parent.display_name", read_only=True)
+    student_name = serializers.CharField(source="student.display_name", read_only=True)
 
     class Meta:
         model = Guardianship

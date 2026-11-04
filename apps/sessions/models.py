@@ -1,7 +1,7 @@
 from django.conf import settings
 from django.db import models
 
-from apps.academics.models import Classroom, Subject
+from apps.academics.models import Classroom, Subject, Term
 
 
 class StudySession(models.Model):
@@ -10,10 +10,9 @@ class StudySession(models.Model):
     classroom = models.ForeignKey(
         Classroom, on_delete=models.CASCADE, related_name="study_sessions"
     )
-    # shortcut: subject optional, general sessions have none
-    subject = models.ForeignKey(
-        Subject, null=True, blank=True, on_delete=models.PROTECT, related_name="study_sessions"
-    )
+    # required: the subject's teaching assignment decides who may host it
+    subject = models.ForeignKey(Subject, on_delete=models.PROTECT, related_name="study_sessions")
+    term = models.ForeignKey(Term, on_delete=models.PROTECT, related_name="study_sessions")
     hosted_by = models.ForeignKey(
         settings.AUTH_USER_MODEL,
         null=True,

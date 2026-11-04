@@ -1,7 +1,7 @@
 from django.conf import settings
 from django.db import models
 
-from apps.academics.models import Classroom, Subject
+from apps.academics.models import Classroom, Subject, Term
 
 
 class Assessment(models.Model):
@@ -14,6 +14,7 @@ class Assessment(models.Model):
     type = models.CharField(max_length=11, choices=Type.choices)
     classroom = models.ForeignKey(Classroom, on_delete=models.CASCADE, related_name="assessments")
     subject = models.ForeignKey(Subject, on_delete=models.PROTECT, related_name="assessments")
+    term = models.ForeignKey(Term, on_delete=models.PROTECT, related_name="assessments")
     created_by = models.ForeignKey(
         settings.AUTH_USER_MODEL,
         null=True,

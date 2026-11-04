@@ -2,6 +2,7 @@ from rest_framework.response import Response
 from rest_framework.views import APIView
 
 from apps.academics.models import Classroom, Lesson
+from apps.academics.rules import current_session
 from apps.accounts.models import User
 from apps.accounts.permissions import IsAdmin
 from apps.assessments.models import Assessment, Submission
@@ -34,13 +35,15 @@ class StatsView(APIView):
             "sessions": StudySession.objects.filter(**in_school).count(),
         }
         classrooms = []
-        for c in Classroom.objects.filter(school_id=school_id).prefetch_related("enrollments"):
+        session = current_session(school_id)
+        for c in Classroom.objects.filter(school_id=school_id).select_related("level"):
             class_scores = [s for s in scored if s.assessment.classroom_id == c.pk]
             classrooms.append(
                 {
                     "id": c.pk,
                     "name": c.name,
-                    "students": c.enrollments.count(),
+                    # students in the class this session
+                    "students": c.enrollments.filter(session=session).count(),
                     "lessons": c.lessons.count(),
                     "assessments": c.assessments.count(),
                     "sessions": c.study_sessions.count(),

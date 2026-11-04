@@ -16,6 +16,10 @@ class User(AbstractUser):
         "schools.School", null=True, blank=True, on_delete=models.CASCADE, related_name="users"
     )
 
+    @property
+    def display_name(self):
+        return self.get_full_name() or self.username
+
     # shortcut: superusers are always admins, keeps the role invariant in one place
     def save(self, *args, **kwargs):
         if self.is_superuser:

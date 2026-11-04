@@ -2,18 +2,18 @@
 
 Default policy for viewsets that use these mixins:
 - every query is limited to the user's school (``SchoolScopedMixin``); this is the tenant boundary
-- any logged-in member of the school can read (list / retrieve)
-- teachers and admins can create, update and delete (``write_permissions`` to change that);
-  with ``owner_scoped`` only the owner or an admin can update / delete
-- students only see rows reachable through their own enrollments (``student_scope``)
+- which rows each role sees inside the school is decided per viewset (``AudienceScopedMixin``)
+- any logged-in member can call read actions; ``write_permissions`` says who may create, update
+  and delete, and ``write_object_permissions`` adds per-object checks for update / delete
 """
 
 from django.core.exceptions import FieldDoesNotExist
-from rest_framework.exceptions import ValidationError
+from django.db.models import ProtectedError
+from rest_framework.exceptions import APIException, ValidationError
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.relations import ManyRelatedField, PrimaryKeyRelatedField
 
-from .permissions import IsOwnerOrAdmin, IsTeacherOrAdmin
+from .permissions import IsTeacherOrAdmin
 
 WRITE_ACTIONS = frozenset({"update", "partial_update", "destroy"})
 
@@ -23,18 +23,16 @@ class RolePermissionsMixin:
     action_permissions: dict = {}
     # who may create / update / delete
     write_permissions: tuple = (IsTeacherOrAdmin,)
-    # restrict update/delete to the object's owner (see IsOwnerOrAdmin / owner_field)
-    owner_scoped = False
+    # extra object-level checks for update / delete, e.g. (TeachesSubjectOrAdmin,)
+    write_object_permissions: tuple = ()
 
     def get_permissions(self):
         if self.action in self.action_permissions:
             classes = self.action_permissions[self.action]
         elif self.action == "create":
             classes = self.write_permissions
-        elif self.action in WRITE_ACTIONS and self.owner_scoped:
-            classes = (*self.write_permissions, IsOwnerOrAdmin)
         elif self.action in WRITE_ACTIONS:
-            classes = self.write_permissions
+            classes = (*self.write_permissions, *self.write_object_permissions)
         else:
             classes = (IsAuthenticated,)
         return [cls() for cls in classes]
@@ -51,7 +49,7 @@ class SaveKwargsMixin:
 
 
 class OwnedObjectMixin(SaveKwargsMixin):
-    # user field stamped on create; also read by IsOwnerOrAdmin
+    # user field stamped with the creator on create
     owner_field = "created_by"
 
     def get_save_kwargs(self):
@@ -79,27 +77,57 @@ class SchoolScopedMixin(SaveKwargsMixin):
         return kwargs
 
 
-class StudentScopedQuerysetMixin:
-    # ORM lookup from this model to the student, e.g. "classroom__enrollments__student"
-    student_scope: str = ""
+class InUse(APIException):
+    status_code = 409
+    default_detail = "This is still in use; remove what depends on it first."
+    default_code = "in_use"
+
+
+class SafeDestroyMixin:
+    """Deleting something other rows still need (PROTECT) is a 409, not a server error."""
+
+    def perform_destroy(self, instance):
+        try:
+            instance.delete()
+        except ProtectedError as exc:
+            raise InUse() from exc
+
+
+class AudienceScopedMixin:
+    """Which rows each role sees inside its school.
+
+    Admins see everything. Each other role is handled by ``scope_<role>(qs, user)``; the
+    defaults let teachers see everything and students and parents nothing, so a viewset
+    must opt them in explicitly.
+    """
 
     def get_queryset(self):
         qs = super().get_queryset()
         user = self.request.user
-        if user.role == "student" and self.student_scope:
-            qs = qs.filter(**{self.student_scope: user})
-            if "__" in self.student_scope:
-                # lookups through a related table can match the same row more than once
-                qs = qs.distinct()
+        if user.role == "admin":
+            return qs
+        scope = getattr(self, f"scope_{user.role}", None)
+        return scope(qs, user) if scope else qs.none()
+
+    def scope_teacher(self, qs, user):
         return qs
 
+    def scope_student(self, qs, user):
+        return qs.none()
 
-def _has_school_field(model):
+    def scope_parent(self, qs, user):
+        return qs.none()
+
+
+def _school_path(model):
+    """Lookup from ``model`` to its school: a ``school_path`` attribute, else a direct field."""
+    if hasattr(model, "school_path"):
+        return model.school_path
     try:
         model._meta.get_field("school")
     except FieldDoesNotExist:
-        return False
-    return True
+        return None
+    return "school"
 
 
 class SameSchoolSerializerMixin:
@@ -117,17 +145,16 @@ class SameSchoolSerializerMixin:
         school_id = getattr(request.user, "school_id", None)
         for field in self.fields.values():
             rel = field.child_relation if isinstance(field, ManyRelatedField) else field
-            if (
-                isinstance(rel, PrimaryKeyRelatedField)
-                and rel.queryset is not None
-                and _has_school_field(rel.queryset.model)
-            ):
-                rel.queryset = rel.queryset.filter(school_id=school_id)
+            if not isinstance(rel, PrimaryKeyRelatedField) or rel.queryset is None:
+                continue
+            path = _school_path(rel.queryset.model)
+            if path:
+                rel.queryset = rel.queryset.filter(**{f"{path}_id": school_id})
 
     def unique_in_school(self, field, value):
         """Validator helper: ``value`` must be unused for ``field`` within the user's school.
 
-        Names (subjects, classes, levels) are unique per school, not globally; DRF can't
+        Names (subjects, levels, sessions) are unique per school, not globally; DRF can't
         generate that check itself because ``school`` isn't a serializer field.
         """
         model = self.Meta.model

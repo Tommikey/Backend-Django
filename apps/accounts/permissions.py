@@ -24,18 +24,3 @@ class IsStudent(RolePermission):
 class IsTeacherOrAdmin(RolePermission):
     allowed_roles = frozenset({"teacher", "admin"})
 
-
-class IsOwnerOrAdmin(BasePermission):
-    """Object-level: admins may act on anything; others only on objects they own.
-
-    The owning user field is read from the view's ``owner_field`` (default ``created_by``).
-    """
-
-    def has_permission(self, request, view):
-        return bool(request.user and request.user.is_authenticated)
-
-    def has_object_permission(self, request, view, obj):
-        if request.user.role == "admin":
-            return True
-        owner_field = getattr(view, "owner_field", "created_by")
-        return getattr(obj, f"{owner_field}_id") == request.user.pk
