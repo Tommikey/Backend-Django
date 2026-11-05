@@ -133,7 +133,15 @@ class TeachingAssignment(models.Model):
 
 
 class Enrollment(models.Model):
-    """A student's class for one session."""
+    """A student's class for one session, and what happened to them after it (set when the
+    school rolls over into the next session)."""
+
+    class Outcome(models.TextChoices):
+        PROMOTED = "promoted", "Promoted"
+        REPEATED = "repeated", "Repeated the year"
+        MOVED = "moved", "Moved class"
+        GRADUATED = "graduated", "Graduated"
+        LEFT = "left", "Left the school"
 
     session = models.ForeignKey(
         AcademicSession, on_delete=models.CASCADE, related_name="enrollments"
@@ -142,6 +150,7 @@ class Enrollment(models.Model):
     student = models.ForeignKey(
         settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name="enrollments"
     )
+    outcome = models.CharField(max_length=10, choices=Outcome.choices, blank=True)
     created_at = models.DateTimeField(auto_now_add=True)
 
     class Meta:

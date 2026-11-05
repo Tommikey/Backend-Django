@@ -17,7 +17,7 @@ Built with Django 5.2, Django REST Framework, JWT auth (SimpleJWT) and PostgreSQ
 | --- | --- |
 | **Schools** | Public onboarding (school + first admin in one call), school settings, class levels, score split (e.g. CA1 20 + CA2 20 + Exam 60, must add up to 100), grade scale |
 | **People** | Students, teachers, parents and admins, all scoped to one school. Admins link parents to their children, or import everyone from a CSV |
-| **School year** | Academic sessions with their terms, subjects, class arms (JSS1A) with a form teacher, who teaches what to which class, which class each student is in |
+| **School year** | Academic sessions with their terms, subjects, class arms (JSS1A) with a form teacher, who teaches what to which class, which class each student is in, and moving everyone into the next session |
 | **Learning** | Lessons per class, subject and term, with completion tracking and progress reports |
 | **Assessments** | Quizzes (auto-graded multiple choice) and assignments (graded by the teacher), with submissions |
 | **Live classes** | Scheduled online sessions for a class and subject, with a join link |
@@ -117,6 +117,20 @@ device's session. `POST auth/password/` with `current_password` and `new_passwor
 own password and returns fresh tokens. Any password change, including an admin reset, signs the
 person out everywhere else.
 
+### Moving to a new session
+
+At the end of a school year the admin creates the next session, then calls
+`POST academics/rollover/` with `to_session`. It previews by default: each student is promoted to
+the same arm one level up (JSS1A → JSS2A, or the only class in that level), and students in the
+final level graduate. The preview shows each student's latest published average and any terms
+not yet published. Decisions override the defaults per student: `repeat`, `move` (to a named
+class), `graduate` or `leave`. With `commit=true` the new enrollments are created at once, along
+with this session's teaching assignments (`copy_teaching_assignments`, on by default);
+`make_current=true` also switches the school to the new session. Each student's outcome
+(promoted, repeated, moved, graduated, left) is recorded on their old enrollment. Graduates and
+leavers keep their accounts, so their report cards stay readable. Running it again skips everyone
+already handled, unless a decision names them (a returning student, say).
+
 ### Bringing people in
 
 Admins import students, teachers and parents from a CSV at `POST imports/people/` (template at
@@ -150,7 +164,7 @@ All routes are under `/api/v1/`:
 | Dashboard | `dashboard/` |
 | Schools | `schools/onboard/`, `schools/me/`, `schools/levels/`, `schools/components/`, `schools/grade-bands/` |
 | People | `users/`, `users/{id}/activation-code/`, `guardianships/`, `imports/people/`, `imports/people/template/` |
-| School year | `academics/academic-sessions/`, `academics/terms/`, `academics/subjects/`, `academics/classrooms/`, `academics/teaching-assignments/`, `academics/enrollments/` |
+| School year | `academics/academic-sessions/`, `academics/terms/`, `academics/subjects/`, `academics/classrooms/`, `academics/teaching-assignments/`, `academics/enrollments/`, `academics/rollover/` |
 | Learning | `academics/lessons/`, `academics/progress/`, `stats/` |
 | Assessments | `assessments/`, `submissions/` |
 | Live classes | `live-classes/` |

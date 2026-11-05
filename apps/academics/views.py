@@ -1,3 +1,4 @@
+from django.db import transaction
 from django.db.models import F
 from drf_spectacular.utils import extend_schema
 from rest_framework import mixins, viewsets
@@ -16,7 +17,7 @@ from apps.accounts.access import (
 from apps.accounts.permissions import IsAdmin, IsStudent
 from apps.assessments.models import Assessment, Submission
 
-from . import openapi
+from . import openapi, rollover
 from .aggregates import count_per, one_decimal, score_pct_per
 from .models import (
     AcademicSession,
@@ -36,6 +37,7 @@ from .serializers import (
     CompletionSerializer,
     EnrollmentSerializer,
     LessonSerializer,
+    RolloverSerializer,
     SubjectSerializer,
     TeachingAssignmentSerializer,
     TermSerializer,
@@ -322,3 +324,43 @@ class ProgressView(APIView):
             for c in classrooms
         ]
         return Response({"session": {"id": session.pk, "name": session.name}, "classrooms": data})
+
+
+class RolloverView(APIView):
+    """POST: move the school into the next session (admin).
+
+    Without commit (the default) nothing is written: every student enrolled in from_session gets
+    a planned action and class (promote to the same arm one level up, graduate from the final
+    level), shown with their latest published average, plus any terms still unpublished. Send
+    decisions to repeat, move, graduate or remove particular students. With commit=true and no
+    errors, the new enrollments (and, by default, teaching assignments) are created at once.
+    Students already enrolled in to_session are left alone, so it can be run again.
+    """
+
+    permission_classes = [IsAdmin]
+
+    @extend_schema(
+        request=RolloverSerializer,
+        responses={200: openapi.RolloverResultSerializer, 400: openapi.RolloverResultSerializer},
+    )
+    def post(self, request):
+        serializer = RolloverSerializer(data=request.data, context={"request": request})
+        serializer.is_valid(raise_exception=True)
+        data = serializer.validated_data
+        source, target = data["from_session"], data["to_session"]
+        with transaction.atomic():
+            # one rollover into a session at a time: a second one waits, then finds these
+            # students already enrolled
+            AcademicSession.objects.select_for_update().get(pk=target.pk)
+            plan = rollover.plan_rollover(
+                request.user.school,
+                source,
+                target,
+                data["decisions"],
+                data["copy_teaching_assignments"],
+            )
+            commit = data["commit"] and plan.valid
+            if commit:
+                rollover.apply_rollover(plan, target, data["make_current"])
+        body = rollover.report(plan, source, target, committed=commit)
+        return Response(body, status=400 if data["commit"] and not plan.valid else 200)
