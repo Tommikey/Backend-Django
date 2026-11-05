@@ -1,6 +1,7 @@
 from django.conf import settings
 from django.db import models
 
+from apps.academics.files import PrivateFileMixin, RandomName, remove_file
 from apps.academics.models import Classroom, Subject, Term
 from apps.academics.validators import UPLOAD_VALIDATORS
 
@@ -48,15 +49,16 @@ class Choice(models.Model):
         return self.text
 
 
-class Submission(models.Model):
+class Submission(PrivateFileMixin, models.Model):
     assessment = models.ForeignKey(Assessment, on_delete=models.CASCADE, related_name="submissions")
     student = models.ForeignKey(
         settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name="submissions"
     )
     text = models.TextField(blank=True)
     file = models.FileField(
-        upload_to="submissions/%Y/%m/", blank=True, validators=UPLOAD_VALIDATORS
+        upload_to=RandomName("submissions"), blank=True, validators=UPLOAD_VALIDATORS
     )
+    file_name = models.CharField(max_length=255, blank=True, default="")  # as uploaded
     score = models.FloatField(null=True, blank=True)
     submitted_at = models.DateTimeField(auto_now_add=True)
     graded_at = models.DateTimeField(null=True, blank=True)
@@ -86,3 +88,6 @@ class Answer(models.Model):
 
     def __str__(self):
         return f"{self.submission} / Q{self.question_id}"
+
+
+models.signals.post_delete.connect(remove_file, sender=Submission)

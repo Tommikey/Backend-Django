@@ -222,6 +222,9 @@ Configuration comes from `.env` (see `.env.example`). Never commit `.env`.
 | `LOG_LEVEL` | `INFO` | Logs go to stdout |
 | `EMAIL_URL` | `consolemail://` | Outgoing email, e.g. `smtp+tls://user:password@smtp.example.com:587`; the default prints emails to the console |
 | `DEFAULT_FROM_EMAIL` | `YAP <no-reply@localhost>` | |
+| `FILE_STORAGE` | `local` | `local` (files in `MEDIA_ROOT`) or `s3` (a private bucket) |
+| `S3_BUCKET`, `S3_ACCESS_KEY_ID`, `S3_SECRET_ACCESS_KEY` | | With `FILE_STORAGE=s3` |
+| `S3_ENDPOINT_URL`, `S3_REGION`, `S3_ADDRESSING_STYLE` | AWS defaults | For R2 or MinIO set the endpoint; MinIO usually needs `path` |
 | `PASSWORD_RESET_URL` | `http://localhost:3000/reset-password` | The frontend page that finishes a reset; `?uid=&token=` are appended |
 
 ### Deploying with Docker
@@ -246,8 +249,13 @@ a host listed in `ALLOWED_HOSTS`.
   `python manage.py collectstatic` at build time; WhiteNoise serves the admin's assets.
 - Rate limits are counted in Django's cache. The default in-memory cache is per process, so with
   several gunicorn workers, point `CACHES` at Redis to make the limits exact.
-- Uploaded files (lessons, submissions) go to `MEDIA_ROOT` and aren't served by Django when
-  `DEBUG=False`. Private file storage is on the roadmap.
+- Uploaded files (lesson materials, submissions) are private. They are stored under random
+  names and downloaded only through `academics/lessons/{id}/file/` and `submissions/{id}/file/`,
+  which apply the same visibility rules as the lesson or submission; a response's `file` field is
+  that link. With `FILE_STORAGE=local` (default) files live in `MEDIA_ROOT` (the `media` volume)
+  and the API streams them; with `FILE_STORAGE=s3` they live in a private bucket (AWS S3,
+  Cloudflare R2, MinIO) and the API redirects to a link that expires in 5 minutes. Replaced and
+  deleted files are removed from storage.
 - CI runs `manage.py check --deploy`, fails on any API docs warning, and builds the Docker image.
 
 ## License

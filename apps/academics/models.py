@@ -5,6 +5,7 @@ and which class each student is in. Lessons hang off a class, subject and term.
 from django.conf import settings
 from django.db import models
 
+from .files import PrivateFileMixin, RandomName, remove_file
 from .validators import UPLOAD_VALIDATORS
 
 
@@ -164,10 +165,13 @@ class Enrollment(models.Model):
         return f"{self.student} @ {self.classroom} ({self.session})"
 
 
-class Lesson(models.Model):
+class Lesson(PrivateFileMixin, models.Model):
     title = models.CharField(max_length=200)
     content = models.TextField(blank=True)
-    file = models.FileField(upload_to="lessons/%Y/%m/", blank=True, validators=UPLOAD_VALIDATORS)
+    file = models.FileField(
+        upload_to=RandomName("lessons"), blank=True, validators=UPLOAD_VALIDATORS
+    )
+    file_name = models.CharField(max_length=255, blank=True, default="")  # as uploaded
     classroom = models.ForeignKey(Classroom, on_delete=models.CASCADE, related_name="lessons")
     subject = models.ForeignKey(Subject, on_delete=models.PROTECT, related_name="lessons")
     term = models.ForeignKey(Term, on_delete=models.PROTECT, related_name="lessons")
@@ -197,3 +201,6 @@ class Completion(models.Model):
 
     def __str__(self):
         return f"{self.student} completed {self.lesson}"
+
+
+models.signals.post_delete.connect(remove_file, sender=Lesson)

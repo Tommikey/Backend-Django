@@ -5,6 +5,7 @@ from rest_framework.validators import UniqueTogetherValidator
 from apps.accounts.access import SameSchoolSerializerMixin
 from apps.accounts.models import User
 
+from .files import FileLinkField
 from .models import (
     AcademicSession,
     Classroom,
@@ -16,6 +17,7 @@ from .models import (
     Term,
 )
 from .rules import current_session, current_term, teaches
+from .validators import UPLOAD_VALIDATORS
 
 # --- defaults: "now", unless the client says otherwise -------------------------------------
 
@@ -263,6 +265,13 @@ class EnrollmentSerializer(SameSchoolSerializerMixin, serializers.ModelSerialize
 class LessonSerializer(
     TeachingScopeSerializerMixin, SameSchoolSerializerMixin, serializers.ModelSerializer
 ):
+    file = FileLinkField(
+        "academics:lesson-file",
+        required=False,
+        allow_null=True,
+        validators=UPLOAD_VALIDATORS,
+        help_text="Upload: a file. Read: the API link that downloads it (needs your login).",
+    )
     term = term_field()
     term_name = serializers.CharField(source="term.name", read_only=True)
     classroom_name = serializers.CharField(source="classroom.name", read_only=True)
@@ -278,6 +287,7 @@ class LessonSerializer(
             "title",
             "content",
             "file",
+            "file_name",
             "classroom",
             "classroom_name",
             "subject",
@@ -288,7 +298,7 @@ class LessonSerializer(
             "created_by_name",
             "created_at",
         ]
-        read_only_fields = ["created_by", "created_at"]
+        read_only_fields = ["file_name", "created_by", "created_at"]
 
 
 class CompletionSerializer(serializers.ModelSerializer):

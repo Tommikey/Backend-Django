@@ -5,7 +5,8 @@ from rest_framework.decorators import action
 from rest_framework.response import Response
 from rest_framework.status import HTTP_409_CONFLICT
 
-from apps.academics.openapi import child_filter
+from apps.academics.files import download
+from apps.academics.openapi import DOWNLOAD, child_filter
 from apps.academics.permissions import TeachesSubjectOrAdmin
 from apps.academics.rules import (
     child_param,
@@ -129,6 +130,13 @@ class SubmissionViewSet(
         if self.action in {"update", "partial_update"}:
             return GradeSerializer
         return SubmissionSerializer
+
+    @DOWNLOAD
+    @action(detail=True, methods=["get"], url_path="file", url_name="file")
+    def download_file(self, request, pk=None):
+        """The submitted file: for the student, their parents, the subject's teacher, the
+        form teacher and admins (whoever can see the submission)."""
+        return download(self.get_object())
 
     def get_queryset(self):
         return filter_by_params(super().get_queryset(), self.request.query_params, "assessment")

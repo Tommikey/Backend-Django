@@ -19,6 +19,7 @@ from apps.assessments.models import Assessment, Submission
 
 from . import openapi, rollover
 from .aggregates import count_per, one_decimal, score_pct_per
+from .files import download
 from .models import (
     AcademicSession,
     Classroom,
@@ -276,6 +277,12 @@ class LessonViewSet(
 
     def scope_parent(self, qs, user):
         return qs.filter(children_enrolled_exists(user, child=child_param(self.request)))
+
+    @openapi.DOWNLOAD
+    @action(detail=True, methods=["get"], url_path="file", url_name="file")
+    def download_file(self, request, pk=None):
+        """The lesson's file, for anyone who can see the lesson."""
+        return download(self.get_object())
 
     @action(detail=True, methods=["post"])
     def complete(self, request, pk=None):

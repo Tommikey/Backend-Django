@@ -1,5 +1,6 @@
 from rest_framework import serializers
 
+from apps.academics.files import FileLinkField
 from apps.academics.serializers import TeachingScopeSerializerMixin, term_field
 from apps.academics.validators import UPLOAD_VALIDATORS
 from apps.accounts.access import SameSchoolSerializerMixin
@@ -177,6 +178,11 @@ class SubmissionSerializer(serializers.ModelSerializer):
     student_admission_number = serializers.CharField(
         source="student.admission_number", read_only=True
     )
+    file = FileLinkField(
+        "assessments:submission-file",
+        read_only=True,
+        help_text="The API link that downloads the submitted file (needs your login), or null",
+    )
     is_late = serializers.SerializerMethodField()
 
     class Meta:
@@ -193,6 +199,7 @@ class SubmissionSerializer(serializers.ModelSerializer):
             "answers",
             "text",
             "file",
+            "file_name",
             "score",
             "submitted_at",
             "is_late",

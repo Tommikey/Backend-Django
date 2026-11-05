@@ -4,7 +4,13 @@ These serializers only describe JSON; the views build it themselves. Shared refe
 across apps live here.
 """
 
-from drf_spectacular.utils import OpenApiParameter, extend_schema, extend_schema_view
+from drf_spectacular.types import OpenApiTypes
+from drf_spectacular.utils import (
+    OpenApiParameter,
+    OpenApiResponse,
+    extend_schema,
+    extend_schema_view,
+)
 from rest_framework import serializers
 
 CHILD_PARAM = OpenApiParameter(
@@ -113,3 +119,14 @@ class RolloverResultSerializer(serializers.Serializer):
     summary = RolloverSummarySerializer()
     unpublished_terms = TermRefSerializer(many=True)
     students = RolloverStudentSerializer(many=True)
+
+
+DOWNLOAD = extend_schema(
+    responses={
+        (200, "application/octet-stream"): OpenApiResponse(
+            OpenApiTypes.BINARY, description="The file (local storage)"
+        ),
+        302: OpenApiResponse(description="Redirect to a link that expires in 5 minutes (S3)"),
+        404: OpenApiResponse(description="No file, or not yours to see"),
+    }
+)
