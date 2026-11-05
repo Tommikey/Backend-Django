@@ -95,6 +95,11 @@ def build_school(slug, name, system, prefix):
     teacher1 = user("teacher1", User.Role.TEACHER, "Ada", "Obi")
     teacher2 = user("teacher2", User.Role.TEACHER, "Bode", "Ade")
     students = [user(f"student{i}", User.Role.STUDENT, "Kid", str(i)) for i in range(1, 6)]
+    # admission numbers like DSS/2025/001: the school's initials, intake year, a running number
+    initials = "".join(word[0] for word in name.split()).upper()
+    for i, student in enumerate(students, 1):
+        student.admission_number = f"{initials}/2025/{i:03d}"
+    User.objects.bulk_update(students, ["admission_number"])
     parent1 = user("parent1", User.Role.PARENT, "Chidi", "Okafor")
     Guardianship.objects.create(parent=parent1, student=students[0], relationship="Father")
 

@@ -86,7 +86,8 @@ The API is at `http://localhost:8000/api/v1/`, its interactive docs at
 ### Demo accounts
 
 `seed` creates three demo schools, one per system, each with a running school year, classes,
-lessons, assessments, a live class, two weeks of attendance and term scores (not yet published). Every password is
+lessons, assessments, a live class, two weeks of attendance and term scores (not yet published).
+Students have admission numbers made from the school's initials (`DSS/2025/001` and so on). Every password is
 `pass1234`.
 
 | School | System | Usernames |
@@ -200,6 +201,9 @@ Configuration comes from `.env` (see `.env.example`). Never commit `.env`.
 | `PASSWORD_RESET_URL` | `http://localhost:3000/reset-password` | The frontend page that finishes a reset; `?uid=&token=` are appended |
 
 ### Deploying with Docker
+
+Before the first production deploy (or starting the frontend), work through
+[docs/LAUNCH_CHECKLIST.md](docs/LAUNCH_CHECKLIST.md): settings to fill in, and decisions still open.
 
 ```bash
 cp .env.prod.example .env.prod        # fill in secrets, hosts and origins
