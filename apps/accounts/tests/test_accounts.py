@@ -144,7 +144,7 @@ def test_parents_cannot_create_links(auth, make_user):
 def test_deleting_someone_with_records_is_refused(auth, admin_user, kit):
     from apps.results.models import Score
 
-    component = kit.school.components.first()
+    component = kit.school.score_split(kit.session).first()
     Score.objects.create(
         student=kit.student, subject=kit.subject, term=kit.term, component=component, value=10
     )

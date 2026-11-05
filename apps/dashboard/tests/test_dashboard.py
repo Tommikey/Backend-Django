@@ -110,7 +110,7 @@ def test_parent_dashboard_after_publishing(auth, busy, admin_user, make_user, sp
         date=timezone.localdate() - timedelta(days=1),
         status="absent",
     )
-    comp = busy.school.components.first()
+    comp = busy.school.score_split(busy.session).first()
     from apps.results.models import Score
 
     Score.objects.create(

@@ -61,7 +61,7 @@ def compute_class_results(classroom, term):
     """
     school = classroom.school
     students = class_students(classroom, term.session)
-    components = list(school.components.order_by("order"))
+    components = list(school.score_split(term.session))
     bands = list(school.grade_bands.order_by("-min_score"))
 
     # scores[student_id][subject] = {component_id: value}

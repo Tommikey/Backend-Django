@@ -57,7 +57,11 @@ class ScoreSheetWriteSerializer(ClassSubjectTermSerializer):
             where = f"Row {i + 1}"
             if student.pk not in in_class:
                 errors.append(f"{where}: student {student.pk} is not in {classroom}.")
-            if component.school_id != classroom.school_id:
+            # a component of another school, or of another session's split
+            if (
+                component.school_id != classroom.school_id
+                or component.session_id != term.session_id
+            ):
                 errors.append(f"{where}: unknown component {component.pk}.")
             elif value is not None and value > component.max_score:
                 errors.append(f"{where}: {component.name} is out of {component.max_score}.")

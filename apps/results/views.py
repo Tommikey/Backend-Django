@@ -92,7 +92,7 @@ class ScoreSheetView(APIView):
 
     @staticmethod
     def sheet(user, classroom, subject, term):
-        components = list(classroom.school.components.order_by("order"))
+        components = list(classroom.school.score_split(term.session))
         students = class_students(classroom, term.session)
         values = {}
         for score in Score.objects.filter(subject=subject, term=term, student__in=students):

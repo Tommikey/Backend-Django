@@ -1,5 +1,6 @@
 import pytest
 
+from apps.academics.rules import current_session
 from apps.accounts.models import User
 from apps.schools.models import School
 from conftest import PASSWORD
@@ -59,7 +60,7 @@ def test_onboarding_applies_the_systems_preset(api, system):
     want = EXPECTED[system]
     assert [lv.name for lv in school.levels.all()] == want["levels"]
     assert school.term_labels == want["terms"]
-    assert {c.name: c.max_score for c in school.components.all()} == want["components"]
+    assert {c.name: c.max_score for c in school.score_split(None)} == want["components"]
     bands = list(school.grade_bands.all())
     assert bands[0].label == want["top_grade"] and bands[-1].min_score == 0
     assert (school.show_position, school.use_gpa) == (want["show_position"], want["use_gpa"])
@@ -150,7 +151,7 @@ def test_admin_replaces_score_split(auth, admin_user, school):
         ("CA", 30, 1),
         ("Exam", 70, 2),
     ]
-    assert school.components.count() == 2
+    assert school.score_split(current_session(school.pk)).count() == 2
 
 
 def test_score_split_must_add_up_to_100(auth, admin_user, school):
@@ -158,7 +159,7 @@ def test_score_split_must_add_up_to_100(auth, admin_user, school):
     r = auth(admin_user).put(COMPONENTS_URL, bad, format="json")
     assert r.status_code == 400
     assert "100" in str(r.json())
-    assert school.components.count() == 3  # the preset is untouched
+    assert school.score_split(current_session(school.pk)).count() == 3  # untouched
 
 
 def test_teacher_cannot_change_score_split(auth, make_user):

@@ -197,7 +197,7 @@ def build_school(slug, name, system, prefix):
 
     # term scores for class A (not published, so the admin can try publishing): each student
     # gets a share of every component's maximum, so totals differ and positions are visible
-    components = list(school.components.order_by("order"))
+    components = list(school.score_split(session))
     share = {
         (maths, 0): 0.9,
         (maths, 1): 0.7,

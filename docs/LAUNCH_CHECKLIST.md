@@ -78,3 +78,6 @@ These are settled; listed so they aren't reopened by accident.
 - **Late work is accepted** and flagged `is_late`; the teacher decides.
 - Teachers see quizzes, and their answer keys, **only for what they teach or their form class**.
 - **Published results lock** scores, comments and the attendance register until unpublished.
+- **Each session has its own score split**, copied from the previous one; it locks once scores
+  are entered against it. The grade scale stays school-wide, since each published report card
+  keeps a copy of the one it was graded with.
