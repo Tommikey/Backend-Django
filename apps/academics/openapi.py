@@ -4,7 +4,14 @@ These serializers only describe JSON; the views build it themselves. Shared refe
 across apps live here.
 """
 
+from drf_spectacular.utils import OpenApiParameter, extend_schema, extend_schema_view
 from rest_framework import serializers
+
+CHILD_PARAM = OpenApiParameter(
+    "child", int, description="Parents: only this child's (one of your linked children)"
+)
+# decorator for list endpoints parents can narrow with ?child=
+child_filter = extend_schema_view(list=extend_schema(parameters=[CHILD_PARAM]))
 
 
 class RefSerializer(serializers.Serializer):

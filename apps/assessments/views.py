@@ -5,8 +5,15 @@ from rest_framework.decorators import action
 from rest_framework.response import Response
 from rest_framework.status import HTTP_409_CONFLICT
 
+from apps.academics.openapi import child_filter
 from apps.academics.permissions import TeachesSubjectOrAdmin
-from apps.academics.rules import enrolled_exists, teaching_exists
+from apps.academics.rules import (
+    child_param,
+    children_enrolled_exists,
+    children_of,
+    enrolled_exists,
+    teaching_exists,
+)
 from apps.academics.views import filter_by_params
 from apps.accounts.access import (
     AudienceScopedMixin,
@@ -26,6 +33,7 @@ from .serializers import (
 )
 
 
+@child_filter
 class AssessmentViewSet(
     RolePermissionsMixin,
     SchoolScopedMixin,
@@ -57,11 +65,14 @@ class AssessmentViewSet(
     def scope_student(self, qs, user):
         return qs.filter(enrolled_exists(user))
 
+    def scope_parent(self, qs, user):
+        return qs.filter(children_enrolled_exists(user, child=child_param(self.request)))
+
     def get_serializer_class(self):
         if self.action == "submit":
             return SubmitSerializer
-        # getattr: the API schema generator asks with an anonymous user
-        if getattr(self.request.user, "role", None) == "student":
+        # no answer keys for students or parents (getattr: the schema generator is anonymous)
+        if getattr(self.request.user, "role", None) in {"student", "parent"}:
             return AssessmentStudentSerializer
         return AssessmentSerializer
 
@@ -83,6 +94,7 @@ class AssessmentViewSet(
         return Response(SubmissionSerializer(submission).data, status=201)
 
 
+@child_filter
 class SubmissionViewSet(
     RolePermissionsMixin,
     SchoolScopedMixin,
@@ -129,6 +141,9 @@ class SubmissionViewSet(
 
     def scope_student(self, qs, user):
         return qs.filter(student=user)
+
+    def scope_parent(self, qs, user):
+        return qs.filter(**children_of(user, child_param(self.request)))
 
     def perform_update(self, serializer):
         serializer.save(graded_at=timezone.now())

@@ -1,8 +1,9 @@
 from django.utils import timezone
 from rest_framework import viewsets
 
+from apps.academics.openapi import child_filter
 from apps.academics.permissions import TeachesSubjectOrAdmin
-from apps.academics.rules import enrolled_exists
+from apps.academics.rules import child_param, children_enrolled_exists, enrolled_exists
 from apps.academics.views import filter_by_params
 from apps.accounts.access import (
     AudienceScopedMixin,
@@ -15,6 +16,7 @@ from .models import LiveClass
 from .serializers import LiveClassSerializer
 
 
+@child_filter
 class LiveClassViewSet(
     RolePermissionsMixin,
     SchoolScopedMixin,
@@ -36,6 +38,9 @@ class LiveClassViewSet(
 
     def scope_student(self, qs, user):
         return qs.filter(enrolled_exists(user))
+
+    def scope_parent(self, qs, user):
+        return qs.filter(children_enrolled_exists(user, child=child_param(self.request)))
 
     def get_queryset(self):
         qs = filter_by_params(
