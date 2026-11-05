@@ -17,6 +17,8 @@ from rest_framework.views import APIView
 from apps.accounts.access import InUse
 from apps.accounts.models import User
 from apps.accounts.refs import student_ref
+from apps.audit import log as audit
+from apps.audit.log import ref
 from apps.notifications import events
 from apps.results.access import can_read_published_card, can_review_class
 from apps.results.serializers import ClassTermSerializer, StudentTermSerializer
@@ -79,16 +81,26 @@ class RegisterView(APIView):
         if elsewhere.exists():
             raise ValidationError({"date": f"{date} is already recorded in another term."})
 
-        was_absent = set(
-            AttendanceRecord.objects.filter(
-                student__in=students, date=date, status=AttendanceRecord.Status.ABSENT
-            ).values_list("student_id", flat=True)
+        before = dict(
+            AttendanceRecord.objects.filter(student__in=students, date=date).values_list(
+                "student_id", "status"
+            )
         )
         newly_absent = [
             mark["student"]
             for mark in data["marks"]
             if mark["status"] == AttendanceRecord.Status.ABSENT
-            and mark["student"].pk not in was_absent
+            and before.get(mark["student"].pk) != AttendanceRecord.Status.ABSENT
+        ]
+        changes = [
+            {
+                "student": mark["student"].pk,
+                "student_name": mark["student"].display_name,
+                "old": before.get(mark["student"].pk),
+                "new": mark["status"],
+            }
+            for mark in data["marks"]
+            if before.get(mark["student"].pk) != mark["status"]
         ]
         for mark in data["marks"]:
             key = {"student": mark["student"], "date": date}
@@ -106,6 +118,15 @@ class RegisterView(APIView):
                     },
                 )
         events.marked_absent(classroom, date, newly_absent)
+        if changes:
+            audit.record(
+                "attendance.updated",
+                school=classroom.school,
+                request=request,
+                label=f"{classroom.name} register, {date:%-d %b %Y}",
+                changes=changes,
+                context={"classroom": ref(classroom), "term": ref(term), "date": date.isoformat()},
+            )
         return Response(self.register(classroom, date, term))
 
     @staticmethod

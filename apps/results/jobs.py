@@ -1,6 +1,7 @@
 """Background tasks for results (run by apps/jobs/queue.py)."""
 
 from apps.academics.models import Term
+from apps.audit import log as audit
 from apps.jobs.queue import JobRefused
 from apps.notifications import events
 
@@ -15,6 +16,13 @@ def publish_results(job):
         raise JobRefused("This term is already published.")
     publication = publish_term(term, job.created_by)
     events.results_published(term)
+    audit.record(
+        "results.published",
+        school=job.school,
+        actor=job.created_by,
+        target=term,
+        changes={"report_cards": TermResult.objects.filter(term=term).count()},
+    )
     return {
         "term": term.pk,
         "published_at": publication.published_at.isoformat(),

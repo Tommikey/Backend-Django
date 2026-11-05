@@ -8,6 +8,8 @@ from apps.accounts.access import InUse
 from apps.accounts.models import User
 from apps.accounts.permissions import IsAdmin
 from apps.accounts.refs import student_ref
+from apps.audit import log as audit
+from apps.audit.log import jsonable, ref
 from apps.jobs import queue as jobs
 from apps.jobs.models import Job
 from apps.jobs.serializers import JobSerializer
@@ -77,6 +79,25 @@ class ScoreSheetView(APIView):
         lock_term(term)
         if is_published(term):
             raise TermPublished()
+        students = {entry["student"].pk: entry["student"] for entry in data["scores"]}
+        before = {
+            (s.student_id, s.component_id): s.value
+            for s in Score.objects.filter(subject=subject, term=term, student__in=students)
+        }
+        changes = []
+        for entry in data["scores"]:
+            old = before.get((entry["student"].pk, entry["component"].pk))
+            new = entry["value"]
+            if (old is None) != (new is None) or (old is not None and old != new):
+                changes.append(
+                    {
+                        "student": entry["student"].pk,
+                        "student_name": entry["student"].display_name,
+                        "component": entry["component"].name,
+                        "old": jsonable(old),
+                        "new": jsonable(new),
+                    }
+                )
         for entry in data["scores"]:
             key = {
                 "student": entry["student"],
@@ -90,6 +111,15 @@ class ScoreSheetView(APIView):
                 Score.objects.update_or_create(
                     **key, defaults={"value": entry["value"], "entered_by": request.user}
                 )
+        if changes:
+            audit.record(
+                "scores.updated",
+                school=classroom.school,
+                request=request,
+                label=f"{classroom.name} {subject.name}, {term}",
+                changes=changes,
+                context={"classroom": ref(classroom), "subject": ref(subject), "term": ref(term)},
+            )
         return Response(self.sheet(request.user, classroom, subject, term))
 
     @staticmethod
@@ -152,10 +182,22 @@ class CommentsView(APIView):
         result, _ = TermResult.objects.get_or_create(
             student=student, term=term, defaults={"classroom": classroom}
         )
+        changes = {}
         for field in ("form_teacher_comment", "principal_comment"):
-            if field in data:
+            if field in data and data[field] != getattr(result, field):
+                changes[field] = [getattr(result, field), data[field]]
                 setattr(result, field, data[field])
         result.save()
+        if changes:
+            audit.record(
+                "comments.updated",
+                school=classroom.school,
+                request=request,
+                target=student,
+                label=f"{student.display_name}, {term}",
+                changes=changes,
+                context={"classroom": ref(classroom), "term": ref(term)},
+            )
         return Response(
             {
                 "student": student.pk,
@@ -206,6 +248,9 @@ class UnpublishView(APIView):
         if not is_published(term):
             raise InUse("This term isn't published.")
         unpublish_term(term)
+        audit.record(
+            "results.unpublished", school=term.session.school, request=request, target=term
+        )
         return Response({"term": term.pk, "published": False})
 
 

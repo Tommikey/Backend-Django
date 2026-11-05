@@ -1,3 +1,5 @@
+from collections import Counter
+
 from django.contrib.auth.password_validation import validate_password
 from django.core.exceptions import ValidationError as DjangoValidationError
 from django.db import transaction
@@ -14,6 +16,8 @@ from rest_framework_simplejwt.tokens import RefreshToken
 from rest_framework_simplejwt.views import TokenBlacklistView, TokenObtainPairView
 
 from apps.academics.rules import current_session
+from apps.audit import log as audit
+from apps.audit.log import AuditedMixin, ref
 from apps.jobs.queue import run_later
 
 from . import bulk_import, openapi, password_reset
@@ -62,6 +66,10 @@ class ActivateView(APIView):
         if user is None or not can_sign_in(user) or not check_code(user, data["code"]):
             raise ValidationError({"code": "That username and activation code don't match."})
         set_new_password(user, data["new_password"])  # a reissued code doubles as a reset
+        if user.school_id:
+            audit.record(
+                "user.activated", school=user.school, request=request, actor=user, target=user
+            )
         refresh = RefreshToken.for_user(user)
         return Response({"access": str(refresh.access_token), "refresh": str(refresh)})
 
@@ -95,6 +103,14 @@ class ImportPeopleView(APIView):
         if not valid:
             return Response(bulk_import.report(rows, ignored, committed=False), status=400)
         codes = bulk_import.commit(rows, school, session, request.user)
+        created = Counter(row.role for row in rows)
+        audit.record(
+            "people.imported",
+            school=school,
+            request=request,
+            label=f"{len(codes)} people from {params.validated_data['file'].name}"[:300],
+            changes={"created": dict(created)},
+        )
         return Response(bulk_import.report(rows, ignored, committed=True, codes=codes))
 
 
@@ -151,6 +167,14 @@ class PasswordResetConfirmView(APIView):
         if user is None:
             raise ValidationError({"token": "This reset link is wrong, used or expired."})
         set_new_password(user, data["new_password"])
+        if user.school_id:
+            audit.record(
+                "user.password_reset_by_email",
+                school=user.school,
+                request=request,
+                actor=user,
+                target=user,
+            )
         refresh = RefreshToken.for_user(user)
         return Response({"access": str(refresh.access_token), "refresh": str(refresh)})
 
@@ -188,6 +212,8 @@ class PasswordChangeView(APIView):
         user.set_password(serializer.validated_data["new_password"])
         user.save(update_fields=["password"])
         end_sessions(user)
+        if user.school_id:
+            audit.record("user.password_changed", school=user.school, request=request, target=user)
         refresh = RefreshToken.for_user(user)
         return Response({"access": str(refresh.access_token), "refresh": str(refresh)})
 
@@ -202,10 +228,30 @@ class MeView(generics.RetrieveUpdateAPIView):
         return self.request.user
 
 
-class UserViewSet(RolePermissionsMixin, SchoolScopedMixin, viewsets.ModelViewSet):
+class UserViewSet(AuditedMixin, RolePermissionsMixin, SchoolScopedMixin, viewsets.ModelViewSet):
     """The school's people. Admins manage them; teachers can look them up."""
 
     serializer_class = SchoolUserSerializer
+    audit_fields = (
+        "username",
+        "first_name",
+        "last_name",
+        "email",
+        "role",
+        "is_active",
+        "admission_number",
+    )
+
+    def audit_label(self, user):
+        return f"{user.display_name} ({user.username})"
+
+    def audit_context(self, user):
+        return {"student": ref(user)} if user.role == User.Role.STUDENT else {}
+
+    def audit_extra_changes(self, serializer):
+        # never the password itself: only that an admin set a new one
+        return {"password": [None, "reset"]} if serializer.validated_data.get("password") else {}
+
     search_fields = ["username", "first_name", "last_name", "email", "admission_number"]
     ordering_fields = [
         "last_name",
@@ -238,6 +284,13 @@ class UserViewSet(RolePermissionsMixin, SchoolScopedMixin, viewsets.ModelViewSet
         new password with. Their current password keeps working until they use it."""
         user = self.get_object()
         code, expires_at = issue_codes([user], request.user)[user.pk]
+        audit.record(
+            "user.activation_code_issued",
+            school=request.user.school,
+            request=request,
+            target=user,
+            label=self.audit_label(user),
+        )
         return Response(
             {"user": user.pk, "username": user.username, "code": code, "expires_at": expires_at},
             status=201,
@@ -252,7 +305,7 @@ class UserViewSet(RolePermissionsMixin, SchoolScopedMixin, viewsets.ModelViewSet
                 "This person has school records (classes, marks, attendance or work). "
                 "Deactivate the account instead (is_active: false)."
             )
-        instance.delete()
+        super().perform_destroy(instance)
 
 
 # relations whose rows would be deleted with the user; any of them means "keep the account"
@@ -273,7 +326,9 @@ def has_history(user):
     return any(getattr(user, name).exists() for name in HISTORY)
 
 
-class GuardianshipViewSet(RolePermissionsMixin, SchoolScopedMixin, viewsets.ModelViewSet):
+class GuardianshipViewSet(
+    AuditedMixin, RolePermissionsMixin, SchoolScopedMixin, viewsets.ModelViewSet
+):
     """Parent-to-student links. Admins manage them; parents and students see their own."""
 
     serializer_class = GuardianshipSerializer
@@ -290,6 +345,13 @@ class GuardianshipViewSet(RolePermissionsMixin, SchoolScopedMixin, viewsets.Mode
     queryset = Guardianship.objects.select_related("parent", "student").order_by("-created_at")
     school_path = "student__school"
     write_permissions = (IsAdmin,)
+    audit_fields = ("parent", "student")
+
+    def audit_label(self, link):
+        return f"{link.parent.display_name} is a parent of {link.student.display_name}"
+
+    def audit_context(self, link):
+        return {"student": ref(link.student)}
 
     def get_queryset(self):
         qs = super().get_queryset()
