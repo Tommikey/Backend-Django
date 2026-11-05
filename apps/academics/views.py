@@ -16,6 +16,8 @@ from apps.accounts.access import (
 )
 from apps.accounts.permissions import IsAdmin, IsStudent
 from apps.assessments.models import Assessment, Submission
+from apps.audit import log as audit
+from apps.audit.log import AuditedMixin, ref
 
 from . import openapi, rollover
 from .aggregates import count_per, one_decimal, score_pct_per
@@ -147,6 +149,7 @@ class SubjectViewSet(
 
 @child_filter
 class ClassroomViewSet(
+    AuditedMixin,
     RolePermissionsMixin,
     SchoolScopedMixin,
     AudienceScopedMixin,
@@ -160,6 +163,13 @@ class ClassroomViewSet(
     ordering_fields = ["level__order", "arm", "created_at"]
     queryset = Classroom.objects.select_related("level", "form_teacher")
     write_permissions = (IsAdmin,)
+    audit_fields = ("level", "arm", "form_teacher")
+
+    def audit_label(self, classroom):
+        return classroom.name
+
+    def audit_context(self, classroom):
+        return {"classroom": ref(classroom)}
 
     def get_queryset(self):
         return filter_by_params(super().get_queryset(), self.request.query_params, "level")
@@ -179,11 +189,23 @@ class ClassroomViewSet(
 
 @child_filter
 class TeachingAssignmentViewSet(
-    RolePermissionsMixin, SchoolScopedMixin, AudienceScopedMixin, viewsets.ModelViewSet
+    AuditedMixin,
+    RolePermissionsMixin,
+    SchoolScopedMixin,
+    AudienceScopedMixin,
+    viewsets.ModelViewSet,
 ):
     """Who teaches which subject to which class, per session. ?mine=true for your own."""
 
     serializer_class = TeachingAssignmentSerializer
+    audit_fields = ("teacher", "classroom", "subject", "session")
+
+    def audit_label(self, a):
+        return f"{a.teacher.display_name}: {a.subject.name}, {a.classroom.name} ({a.session.name})"
+
+    def audit_context(self, a):
+        return {"classroom": ref(a.classroom), "subject": ref(a.subject)}
+
     search_fields = ["subject__name", "teacher__first_name", "teacher__last_name"]
     ordering_fields = ["classroom__level__order", "subject__name", "teacher__last_name"]
     queryset = TeachingAssignment.objects.select_related(
@@ -211,11 +233,23 @@ class TeachingAssignmentViewSet(
 
 @child_filter
 class EnrollmentViewSet(
-    RolePermissionsMixin, SchoolScopedMixin, AudienceScopedMixin, viewsets.ModelViewSet
+    AuditedMixin,
+    RolePermissionsMixin,
+    SchoolScopedMixin,
+    AudienceScopedMixin,
+    viewsets.ModelViewSet,
 ):
     """Which class each student is in, per session (one class per session)."""
 
     serializer_class = EnrollmentSerializer
+    audit_fields = ("student", "classroom", "session", "outcome")
+
+    def audit_label(self, e):
+        return f"{e.student.display_name} in {e.classroom.name} ({e.session.name})"
+
+    def audit_context(self, e):
+        return {"student": ref(e.student), "classroom": ref(e.classroom)}
+
     search_fields = [
         "student__first_name",
         "student__last_name",
@@ -404,4 +438,14 @@ class RolloverView(APIView):
             if commit:
                 rollover.apply_rollover(plan, target, data["make_current"])
         body = rollover.report(plan, source, target, committed=commit)
+        if commit:
+            audit.record(
+                "rollover.applied",
+                school=request.user.school,
+                request=request,
+                target=target,
+                label=f"{source.name} to {target.name}",
+                changes=body["summary"],
+                context={"from_session": ref(source), "to_session": ref(target)},
+            )
         return Response(body, status=400 if data["commit"] and not plan.valid else 200)

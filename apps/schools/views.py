@@ -14,6 +14,8 @@ from apps.academics.rules import current_session
 from apps.accounts.access import InUse, RolePermissionsMixin, SafeDestroyMixin, SchoolScopedMixin
 from apps.accounts.permissions import IsAdmin
 from apps.accounts.serializers import UserSerializer
+from apps.audit import log as audit
+from apps.audit.log import AuditedMixin
 from apps.results.models import Score
 
 from . import openapi
@@ -52,10 +54,11 @@ class OnboardView(APIView):
         )
 
 
-class MySchoolView(generics.RetrieveUpdateAPIView):
+class MySchoolView(AuditedMixin, generics.RetrieveUpdateAPIView):
     """The user's own school and its settings. Members read; admins edit."""
 
     serializer_class = SchoolSerializer
+    audit_fields = ("name", "show_position", "use_gpa", "term_labels", "timezone")
 
     def get_permissions(self):
         if self.request.method in {"PUT", "PATCH"}:
@@ -105,6 +108,7 @@ class ReplaceAllConfigView(APIView):
         serializer = self.set_serializer(data=request.data)
         serializer.is_valid(raise_exception=True)
         self.check_replaceable(request)
+        before = self.item_serializer(self.get_items(), many=True).data
         try:
             self.get_items().delete()
         except ProtectedError as exc:  # something came to depend on it meanwhile
@@ -113,7 +117,21 @@ class ReplaceAllConfigView(APIView):
             self.model(school=request.user.school, **self.extra_fields(i), **item)
             for i, item in enumerate(serializer.validated_data[self.key], 1)
         )
-        return self.get(request)
+        response = self.get(request)
+        after = response.data[self.key]
+        strip = lambda items: [{k: v for k, v in i.items() if k != "id"} for i in items]  # noqa: E731
+        if strip(before) != strip(after):
+            audit.record(
+                f"{self.key}.replaced",
+                school=request.user.school,
+                request=request,
+                label=self.audit_label(),
+                changes={"old": strip(before), "new": strip(after)},
+            )
+        return response
+
+    def audit_label(self):
+        return self.key.replace("_", " ").capitalize()
 
     def extra_fields(self, position):
         return {}
@@ -153,6 +171,10 @@ class ComponentsView(ReplaceAllConfigView):
     item_serializer = AssessmentComponentSerializer
     set_serializer = ComponentSetSerializer
     key = "components"
+
+    def audit_label(self):
+        session = self.split_session()
+        return f"Score split, {session.name}" if session else "Score split (school default)"
 
     def split_session(self):
         if not hasattr(self, "_split_session"):

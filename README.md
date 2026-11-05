@@ -162,6 +162,24 @@ the ids to open what it is about. `POST notifications/{id}/read/`, `POST notific
 `GET/PATCH notifications/settings/` turns the emails off. Emails go out from the worker in
 batches; read notifications are deleted after 90 days, any after a year.
 
+### Audit log
+
+Admins can see who changed what at `GET audit/`, newest first: each entry has the action, who did
+it (name kept even if the account goes), when, from which IP, what it was about, and the
+changes as before -> after. Recorded:
+
+- marks (one entry per score-sheet save, one row per changed mark), the register, report card
+  comments, grading, publishing and unpublishing results;
+- people: created, edited (a password reset shows only that it happened), deactivated,
+  deleted, activation codes issued, passwords changed or reset, first sign-in; imports;
+- parent links, enrollments (class moves), teaching assignments, classes and form teachers,
+  rollovers;
+- school settings, the score split and the grade scale.
+
+Filter with `?action=` (`scores` or `scores.updated`), `?actor=`, `?student=` (everything
+about one student), `?classroom=`, `?term=`, `?target_type=&target_id=`, `?since=&until=`
+(dates). Entries can't be edited or deleted, through the API or the Django admin.
+
 Times in notifications, and "today" for registers and dashboards, are in the school's time zone
 (`timezone` in `schools/me/`, set from the system's preset: Africa/Lagos, Europe/London,
 America/New_York).
@@ -228,6 +246,7 @@ All routes are under `/api/v1/`:
 | Attendance | `attendance/register/`, `attendance/summary/`, `attendance/student/` |
 | Jobs | `jobs/` |
 | Notifications | `notifications/`, `notifications/settings/` |
+| Audit log | `audit/` |
 
 ## Project layout
 
@@ -244,6 +263,7 @@ apps/
   dashboard/       what each role sees first
   jobs/            background jobs (django-rq) and their status
   notifications/   in-app and email notifications, live class reminders
+  audit/           who changed what: marks, attendance, people, settings
 conftest.py        shared pytest fixtures
 ```
 

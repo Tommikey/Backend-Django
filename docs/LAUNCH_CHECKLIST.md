@@ -34,6 +34,10 @@ off in the PR that handles them, and add new ones as they come up.
       one app server. Keep the bucket private: never enable public access on it.
 - [ ] **Backups**: automated daily backups of the database and of uploaded files (the `media`
       volume or the bucket), and one restore actually tested.
+- [ ] **Personal data**: the audit log keeps IP addresses and names indefinitely, and the app
+      holds children's records. Check what data-protection law requires (in Nigeria, the NDPA
+      2023): a privacy notice, how long to keep the audit log and notifications, and who may see
+      them. Decide a retention period for the audit log (none is set; it only grows).
 - [ ] **Error monitoring**: decide on one (e.g. Sentry) so 500s reach someone.
 - [ ] **HSTS preload**: decide. The deploy check for it is silenced, since preload is a one-way
       commitment for the whole domain.

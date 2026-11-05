@@ -23,6 +23,7 @@ from apps.accounts.access import (
     SchoolScopedMixin,
 )
 from apps.accounts.permissions import IsStudent
+from apps.audit.log import AuditedMixin, ref
 from apps.notifications import events
 
 from .models import Answer, Assessment, Submission
@@ -102,6 +103,7 @@ class AssessmentViewSet(
 
 @child_filter
 class SubmissionViewSet(
+    AuditedMixin,
     RolePermissionsMixin,
     SchoolScopedMixin,
     AudienceScopedMixin,
@@ -130,6 +132,22 @@ class SubmissionViewSet(
     school_path = "assessment__classroom__school"
     write_object_permissions = (TeachesSubjectOrAdmin,)
     teaching_path = "assessment"  # TeachesSubjectOrAdmin reads class/subject/term from there
+    audit_fields = ("score",)
+
+    def audit_name(self, submission):
+        return "submission"
+
+    def audit_label(self, submission):
+        return f"{submission.student.display_name}: {submission.assessment.title}"
+
+    def audit_context(self, submission):
+        assessment = submission.assessment
+        return {
+            "student": ref(submission.student),
+            "classroom": ref(assessment.classroom),
+            "subject": ref(assessment.subject),
+            "term": ref(assessment.term),
+        }
 
     def get_serializer_class(self):
         if self.action in {"update", "partial_update"}:
@@ -159,7 +177,7 @@ class SubmissionViewSet(
         return qs.filter(**children_of(user, child_param(self.request)))
 
     def perform_update(self, serializer):
-        serializer.save(graded_at=timezone.now())
+        super().perform_update(serializer, graded_at=timezone.now())
 
     def partial_update(self, request, *args, **kwargs):
         # respond with the full submission, not the grade-only input serializer
