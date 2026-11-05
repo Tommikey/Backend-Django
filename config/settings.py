@@ -62,6 +62,7 @@ INSTALLED_APPS = [
     "apps.jobs",
     "apps.notifications",
     "apps.audit",
+    "apps.timetable",
 ]
 
 MIDDLEWARE = [

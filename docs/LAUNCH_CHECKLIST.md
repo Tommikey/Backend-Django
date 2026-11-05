@@ -60,6 +60,9 @@ off in the PR that handles them, and add new ones as they come up.
 - [ ] **SMS or WhatsApp for parents**: notifications are in-app and email only. Many parents
       may not read email; decide whether absences and report cards should also go by SMS or
       WhatsApp (a paid provider, e.g. Termii or Twilio), and who pays for it.
+- [ ] **Timetable shape**: periods are the same every day, and only admins edit timetables.
+      Decide whether schools need a shorter Friday (periods per day), double periods shown as
+      one block, or a timetable officer who isn't an admin.
 - [ ] **Report card design**: the PDF is a clean, generic layout. Schools will want their logo,
       address, motto and "next term begins" date on it, and some a different layout; decide
       what to make configurable (needs logo upload and a few school fields).

@@ -16,7 +16,7 @@ from .models import AuditEntry
 def jsonable(value):
     if isinstance(value, Decimal):
         return str(value)
-    if isinstance(value, datetime.date | datetime.datetime):
+    if isinstance(value, datetime.date | datetime.datetime | datetime.time):
         return value.isoformat()
     if isinstance(value, models.Model):
         return value.pk

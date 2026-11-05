@@ -165,6 +165,20 @@ the ids to open what it is about. `POST notifications/{id}/read/`, `POST notific
 `GET/PATCH notifications/settings/` turns the emails off. Emails go out from the worker in
 batches; read notifications are deleted after 90 days, any after a year.
 
+### Timetable
+
+Admins set the school day's periods and breaks at `timetable/periods/` (the same every day;
+overlaps are refused), then each class's week with one call:
+`PUT timetable/class/` `{classroom, lessons: [{day, period, subject}]}` (day 1 = Monday ... 6 =
+Saturday). A class can only be timetabled for subjects it has a teaching assignment for, and
+the teacher comes from that assignment, so changing who teaches a subject updates the timetable.
+A teacher can't be in two classes in one period: the save is refused, naming the clash.
+
+`GET timetable/class/?classroom=` (staff, the class's students and their parents) and
+`GET timetable/teacher/` (your own; admins `?teacher=`) return the week as a grid: the periods,
+then each day's lessons, one per period (null when free). Dashboards show today's lessons. A
+rollover that copies teaching assignments copies the timetable too.
+
 ### Audit log
 
 Admins can see who changed what at `GET audit/`, newest first: each entry has the action, who did
@@ -250,6 +264,7 @@ All routes are under `/api/v1/`:
 | Jobs | `jobs/` |
 | Notifications | `notifications/`, `notifications/settings/` |
 | Audit log | `audit/` |
+| Timetable | `timetable/periods/`, `timetable/class/`, `timetable/teacher/` |
 
 ## Project layout
 
@@ -267,6 +282,7 @@ apps/
   jobs/            background jobs (django-rq) and their status
   notifications/   in-app and email notifications, live class reminders
   audit/           who changed what: marks, attendance, people, settings
+  timetable/       periods, class and teacher weeks
 conftest.py        shared pytest fixtures
 ```
 

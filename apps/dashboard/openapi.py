@@ -5,6 +5,7 @@ from rest_framework import serializers
 from apps.academics.openapi import RefSerializer, StudentRefSerializer, TermRefSerializer
 from apps.assessments.models import Assessment
 from apps.attendance.openapi import AttendanceSummarySerializer
+from apps.timetable.openapi import TodayLessonSerializer
 
 
 class LiveClassItemSerializer(serializers.Serializer):
@@ -41,6 +42,7 @@ class StudentBlockSerializer(serializers.Serializer):
     upcoming_live_classes = LiveClassItemSerializer(many=True)
     attendance = AttendanceSummarySerializer(allow_null=True)
     latest_report_card = LatestCardSerializer(allow_null=True)
+    timetable_today = TodayLessonSerializer(many=True, help_text="Today's lessons, in order")
 
 
 class ChildSerializer(serializers.Serializer):
@@ -74,6 +76,7 @@ class TeacherBlockSerializer(serializers.Serializer):
     to_grade_count = serializers.IntegerField()
     to_grade = ToGradeSerializer(many=True)
     upcoming_live_classes = LiveClassItemSerializer(many=True)
+    timetable_today = TodayLessonSerializer(many=True, help_text="Today's lessons, in order")
 
 
 class PeopleSerializer(serializers.Serializer):

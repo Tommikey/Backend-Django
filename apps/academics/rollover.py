@@ -178,7 +178,7 @@ def apply_rollover(plan, to_session, make_current):
         for p in plan.placements
         if p.action in STAYS
     )
-    TeachingAssignment.objects.bulk_create(
+    copies = TeachingAssignment.objects.bulk_create(
         TeachingAssignment(
             session=to_session,
             classroom_id=a.classroom_id,
@@ -187,8 +187,26 @@ def apply_rollover(plan, to_session, make_current):
         )
         for a in plan.teaching_to_copy
     )
+    _copy_timetable(plan.teaching_to_copy, copies, to_session)
     if make_current:
         make_term_current(to_session.terms.order_by("order").first())
+
+
+def _copy_timetable(old_assignments, new_assignments, to_session):
+    """The copied assignments keep their places on the timetable in the new session."""
+    from apps.timetable.models import Slot
+
+    new_for = dict(zip((a.pk for a in old_assignments), new_assignments, strict=True))
+    Slot.objects.bulk_create(
+        Slot(
+            assignment=new_for[slot.assignment_id],
+            session=to_session,
+            classroom_id=slot.classroom_id,
+            day=slot.day,
+            period_id=slot.period_id,
+        )
+        for slot in Slot.objects.filter(assignment__in=list(new_for))
+    )
 
 
 def report(plan, from_session, to_session, committed):
