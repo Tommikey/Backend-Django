@@ -9,6 +9,7 @@ from rest_framework.views import APIView
 
 from apps.accounts.access import (
     AudienceScopedMixin,
+    InUse,
     OwnedObjectMixin,
     RolePermissionsMixin,
     SafeDestroyMixin,
@@ -202,6 +203,26 @@ class TeachingAssignmentViewSet(
 
     def audit_label(self, a):
         return f"{a.teacher.display_name}: {a.subject.name}, {a.classroom.name} ({a.session.name})"
+
+    def perform_update(self, serializer, **save_kwargs):
+        from apps.timetable.services import describe, teacher_clashes
+
+        assignment, changes = serializer.instance, serializer.validated_data
+        slots = list(assignment.slots.all())
+        if slots:
+            for field in ("classroom", "session", "subject"):
+                if changes.get(field, getattr(assignment, field)) != getattr(assignment, field):
+                    raise InUse(
+                        "This is on the timetable. Take it off the class's timetable first, "
+                        "or change only the teacher."
+                    )
+            teacher = changes.get("teacher", assignment.teacher)
+            if teacher != assignment.teacher:
+                wanted = [(teacher.pk, s.day, s.period_id) for s in slots]
+                clashes = teacher_clashes(assignment.session, wanted, ignore_assignment=assignment)
+                if clashes:
+                    raise ValidationError({"teacher": [describe(s) for s in clashes]})
+        super().perform_update(serializer, **save_kwargs)
 
     def audit_context(self, a):
         return {"classroom": ref(a.classroom), "subject": ref(a.subject)}

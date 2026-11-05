@@ -84,6 +84,7 @@ def test_teacher_dashboard(auth, busy, spec):
         "to_grade_count": 0,
         "to_grade": [],
         "upcoming_live_classes": [],
+        "timetable_today": [],
     }
 
 
@@ -129,6 +130,7 @@ def test_parent_dashboard_after_publishing(auth, busy, admin_user, make_user, sp
 def test_query_counts_are_bounded(auth, busy, admin_user, make_user, django_assert_max_num_queries):
     for _ in range(6):  # a bigger class
         enroll(make_user("student"), busy.classroom)
-    for user, limit in ((busy.student, 12), (busy.teacher, 10), (admin_user, 10)):
+    # the timetable adds a fixed 2-3 (enrollment, slots, school), never one per row
+    for user, limit in ((busy.student, 15), (busy.teacher, 12), (admin_user, 10)):
         with django_assert_max_num_queries(limit):
             assert auth(user).get(URL).status_code == 200

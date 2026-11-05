@@ -17,6 +17,8 @@ from apps.attendance.services import class_attendance, report_card_attendance
 from apps.live_classes.models import LiveClass
 from apps.results.models import Publication, Score, TermResult
 from apps.results.services import dec
+from apps.timetable.services import slots_for
+from apps.timetable.services import today as today_lessons
 
 LIST_LIMIT = 5
 
@@ -119,7 +121,18 @@ def student_block(student, term):
         "upcoming_live_classes": upcoming_live_classes(enrolled_exists(student)),
         "attendance": student_attendance(student, term),
         "latest_report_card": latest_report_card(student),
+        "timetable_today": student_timetable_today(student, term),
     }
+
+
+def student_timetable_today(student, term):
+    if term is None:
+        return []
+    enrollment = Enrollment.objects.filter(student=student, session=term.session).first()
+    if enrollment is None:
+        return []
+    slots = slots_for(classroom=enrollment.classroom, session=term.session)
+    return today_lessons(student.school, list(slots))
 
 
 def parent_block(parent, term):
@@ -183,6 +196,14 @@ def teacher_block(teacher, term, today):
         ],
         "upcoming_live_classes": upcoming_live_classes(
             teaching_exists(teacher) | Q(hosted_by=teacher)
+        ),
+        "timetable_today": (
+            today_lessons(
+                teacher.school,
+                list(slots_for(session=term.session, assignment__teacher=teacher)),
+            )
+            if term
+            else []
         ),
     }
 
