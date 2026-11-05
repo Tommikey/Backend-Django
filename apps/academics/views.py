@@ -29,8 +29,15 @@ from .models import (
     TeachingAssignment,
     Term,
 )
+from .openapi import child_filter
 from .permissions import TeachesSubjectOrAdmin
-from .rules import current_session, enrolled_exists
+from .rules import (
+    child_param,
+    children_enrolled_exists,
+    children_of,
+    current_session,
+    enrolled_exists,
+)
 from .serializers import (
     AcademicSessionSerializer,
     ClassroomSerializer,
@@ -137,6 +144,7 @@ class SubjectViewSet(
     write_permissions = (IsAdmin,)
 
 
+@child_filter
 class ClassroomViewSet(
     RolePermissionsMixin,
     SchoolScopedMixin,
@@ -159,7 +167,16 @@ class ClassroomViewSet(
         # the classes they have been in, any session
         return qs.filter(enrollments__student=user).distinct()
 
+    def scope_parent(self, qs, user):
+        # the classes their children have been in (?child= for one of them)
+        child = child_param(self.request)
+        lookup = {"enrollments__student__guardian_links__parent": user}
+        if child is not None:
+            lookup["enrollments__student_id"] = child
+        return qs.filter(**lookup).distinct()
 
+
+@child_filter
 class TeachingAssignmentViewSet(
     RolePermissionsMixin, SchoolScopedMixin, AudienceScopedMixin, viewsets.ModelViewSet
 ):
@@ -181,7 +198,17 @@ class TeachingAssignmentViewSet(
             qs = qs.filter(teacher=self.request.user)
         return qs
 
+    def scope_student(self, qs, user):
+        # who teaches them: their classes, in those sessions
+        return qs.filter(enrolled_exists(user, session_field="session"))
 
+    def scope_parent(self, qs, user):
+        return qs.filter(
+            children_enrolled_exists(user, child=child_param(self.request), session_field="session")
+        )
+
+
+@child_filter
 class EnrollmentViewSet(
     RolePermissionsMixin, SchoolScopedMixin, AudienceScopedMixin, viewsets.ModelViewSet
 ):
@@ -214,10 +241,14 @@ class EnrollmentViewSet(
     def scope_student(self, qs, user):
         return qs.filter(student=user)
 
+    def scope_parent(self, qs, user):
+        return qs.filter(**children_of(user, child_param(self.request)))
+
 
 # --- learning (teachers post for what they teach) -------------------------------------------
 
 
+@child_filter
 class LessonViewSet(
     RolePermissionsMixin,
     SchoolScopedMixin,
@@ -242,6 +273,9 @@ class LessonViewSet(
 
     def scope_student(self, qs, user):
         return qs.filter(enrolled_exists(user))
+
+    def scope_parent(self, qs, user):
+        return qs.filter(children_enrolled_exists(user, child=child_param(self.request)))
 
     @action(detail=True, methods=["post"])
     def complete(self, request, pk=None):

@@ -30,8 +30,11 @@ Built with Django 5.2, Django REST Framework, JWT auth (SimpleJWT) and PostgreSQ
 - **Teachers** work on the classes and subjects they're assigned: lessons, assessments, live
   classes and scores. A class's **form teacher** also sees that class's broadsheet and writes its
   report card comments, and takes its daily register.
-- **Students** see their own classes, work, attendance and published report cards.
-- **Parents** see their linked children, their attendance and their published report cards.
+- **Students** see their own classes and who teaches them, their work, attendance and published
+  report cards.
+- **Parents** see what their linked children see, read-only: lessons, assessments (without
+  answer keys), the children's submissions and grades, live classes, classes and teachers, plus
+  attendance and published report cards. `?child=<id>` narrows a list to one child.
 - **Schools are isolated.** Another school's data behaves as if it doesn't exist; IDs from other
   schools are rejected as unknown, not forbidden.
 - **Platform staff** (superusers) use the Django admin only and belong to no school. They can
