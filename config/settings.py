@@ -217,6 +217,8 @@ if FILE_STORAGE == "s3":
             "addressing_style": env("S3_ADDRESSING_STYLE"),  # "path" for MinIO
             "default_acl": "private",
             "querystring_auth": True,
+            # SigV4 links: the legacy SigV2 default is refused by R2 and newer AWS regions
+            "signature_version": "s3v4",
             "file_overwrite": False,
         },
     }
