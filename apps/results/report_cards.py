@@ -77,49 +77,63 @@ def from_snapshot(result, publication):
 
 def live(student, classroom, term):
     """A draft report card from the current scores (staff preview before publishing)."""
+    return live_class(classroom, term, [student])[0]
+
+
+def live_class(classroom, term, students=None):
+    """Draft report cards for ``students`` (default: the whole class), computing the class's
+    results once."""
     computed = compute_class_results(classroom, term)
-    row = next((r for r in computed["students"] if r["student"].pk == student.pk), None)
-    lines = row["subjects"] if row else []
-    summary = row["summary"] if row else {}
-    comments = TermResult.objects.filter(student=student, term=term).first()
+    rows = {r["student"].pk: r for r in computed["students"]}
+    if students is None:
+        students = [r["student"] for r in computed["students"]]
+    attendance = class_attendance(classroom, term, students)
+    comments = {r.student_id: r for r in TermResult.objects.filter(student__in=students, term=term)}
     school = classroom.school
-    card = _header(student, classroom, term, False)
-    card.update(
-        {
-            "form_teacher": classroom.form_teacher.display_name if classroom.form_teacher else "",
-            "subjects": [
-                {
-                    "subject": line["subject"].name,
-                    "scores": [{**s, "value": dec(s["value"])} for s in line["scores"]],
-                    "total": dec(line["total"]),
-                    "grade": line["grade"],
-                    "remark": line["remark"],
-                    "grade_point": dec(line["grade_point"]),
-                    "class_average": dec(line["class_average"]),
-                    "class_highest": dec(line["class_highest"]),
-                    "class_lowest": dec(line["class_lowest"]),
-                    "position": line["position"],
-                }
-                for line in lines
-            ],
-            "summary": _summary(
-                summary.get("total"),
-                summary.get("average"),
-                summary.get("subjects_count", 0),
-                summary.get("position"),
-                summary.get("out_of"),
-                summary.get("gpa"),
-            ),
-            "attendance": report_card_attendance(
-                class_attendance(classroom, term, [student])[student.pk]
-            ),
-            "comments": {
-                "form_teacher": comments.form_teacher_comment if comments else "",
-                "principal": comments.principal_comment if comments else "",
-            },
-            "show_position": school.show_position,
-            "use_gpa": school.use_gpa,
-            "grading_scale": grading_scale(school),
-        }
-    )
-    return card
+    form_teacher = classroom.form_teacher.display_name if classroom.form_teacher else ""
+    scale = grading_scale(school)
+    cards = []
+    for student in students:
+        row = rows.get(student.pk)
+        lines = row["subjects"] if row else []
+        summary = row["summary"] if row else {}
+        written = comments.get(student.pk)
+        card = _header(student, classroom, term, False)
+        card.update(
+            {
+                "form_teacher": form_teacher,
+                "subjects": [
+                    {
+                        "subject": line["subject"].name,
+                        "scores": [{**s, "value": dec(s["value"])} for s in line["scores"]],
+                        "total": dec(line["total"]),
+                        "grade": line["grade"],
+                        "remark": line["remark"],
+                        "grade_point": dec(line["grade_point"]),
+                        "class_average": dec(line["class_average"]),
+                        "class_highest": dec(line["class_highest"]),
+                        "class_lowest": dec(line["class_lowest"]),
+                        "position": line["position"],
+                    }
+                    for line in lines
+                ],
+                "summary": _summary(
+                    summary.get("total"),
+                    summary.get("average"),
+                    summary.get("subjects_count", 0),
+                    summary.get("position"),
+                    summary.get("out_of"),
+                    summary.get("gpa"),
+                ),
+                "attendance": report_card_attendance(attendance[student.pk]),
+                "comments": {
+                    "form_teacher": written.form_teacher_comment if written else "",
+                    "principal": written.principal_comment if written else "",
+                },
+                "show_position": school.show_position,
+                "use_gpa": school.use_gpa,
+                "grading_scale": scale,
+            }
+        )
+        cards.append(card)
+    return cards
