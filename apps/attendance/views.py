@@ -16,6 +16,7 @@ from rest_framework.views import APIView
 
 from apps.accounts.access import InUse
 from apps.accounts.models import User
+from apps.accounts.refs import student_ref
 from apps.results.access import can_read_published_card, can_review_class
 from apps.results.serializers import ClassTermSerializer, StudentTermSerializer
 from apps.results.services import class_students, enrollment_for, is_published, lock_term
@@ -40,10 +41,6 @@ def validated(serializer_class, request, data):
 def check_can_take(user, classroom):
     if not can_review_class(user, classroom):
         raise PermissionDenied("Only the form teacher or an admin takes this class's register.")
-
-
-def student_ref(student):
-    return {"id": student.pk, "name": student.display_name}
 
 
 def term_ref(term):

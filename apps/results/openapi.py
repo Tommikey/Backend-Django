@@ -2,7 +2,7 @@
 
 from rest_framework import serializers
 
-from apps.academics.openapi import RefSerializer, TermRefSerializer
+from apps.academics.openapi import RefSerializer, StudentRefSerializer, TermRefSerializer
 from apps.attendance.openapi import AttendanceSummarySerializer
 
 DECIMAL = {"help_text": 'Decimal as a string, e.g. "77.50"'}
@@ -15,7 +15,7 @@ class ComponentSerializer(serializers.Serializer):
 
 
 class ScoreRowSerializer(serializers.Serializer):
-    student = RefSerializer()
+    student = StudentRefSerializer()
     scores = serializers.DictField(
         child=serializers.CharField(allow_null=True),
         help_text="Component id -> mark (decimal string) or null if not entered",
@@ -105,7 +105,7 @@ class ReportCardSerializer(serializers.Serializer):
     published = serializers.BooleanField(help_text="False: a live draft (staff only)")
     published_at = serializers.DateTimeField(allow_null=True)
     school = SchoolRefSerializer()
-    student = RefSerializer()
+    student = StudentRefSerializer()
     classroom = RefSerializer()
     session = serializers.CharField()
     term = TermNameSerializer()
@@ -128,7 +128,7 @@ class SubjectStatSerializer(serializers.Serializer):
 
 
 class BroadsheetRowSerializer(serializers.Serializer):
-    student = RefSerializer()
+    student = StudentRefSerializer()
     totals = serializers.DictField(child=serializers.CharField(), help_text="Subject name -> total")
     total = serializers.CharField(allow_null=True)
     average = serializers.CharField(allow_null=True)

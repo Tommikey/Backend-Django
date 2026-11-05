@@ -23,8 +23,9 @@ class UserSerializer(serializers.ModelSerializer):
             "role",
             "school",
             "school_name",
+            "admission_number",
         ]
-        read_only_fields = ["username", "role", "school"]
+        read_only_fields = ["username", "role", "school", "admission_number"]
 
 
 class _Ref(serializers.Serializer):
@@ -51,6 +52,7 @@ class _Teaching(serializers.Serializer):
 
 
 class _Child(_Ref):
+    admission_number = serializers.CharField()
     relationship = serializers.CharField()
     classroom = _Ref(allow_null=True, help_text="Their class in the current session")
 
@@ -166,6 +168,7 @@ class MeSerializer(UserSerializer):
             {
                 "id": link.student.pk,
                 "name": link.student.display_name,
+                "admission_number": link.student.admission_number,
                 "relationship": link.relationship,
                 "classroom": classes.get(link.student_id),
             }
@@ -179,6 +182,20 @@ class SchoolUserSerializer(serializers.ModelSerializer):
     password = serializers.CharField(
         write_only=True, required=False, style={"input_type": "password"}
     )
+    has_password = serializers.SerializerMethodField(
+        help_text="False until an imported person activates their account"
+    )
+    activation_expires_at = serializers.SerializerMethodField(
+        help_text="When their unused activation code expires; null if none is pending"
+    )
+
+    def get_has_password(self, user) -> bool:
+        return user.has_usable_password()
+
+    @extend_schema_field(serializers.DateTimeField(allow_null=True))
+    def get_activation_expires_at(self, user):
+        code = getattr(user, "activation_code", None)
+        return code.expires_at if code else None
 
     class Meta:
         model = User
@@ -189,11 +206,16 @@ class SchoolUserSerializer(serializers.ModelSerializer):
             "first_name",
             "last_name",
             "role",
+            "admission_number",
             "is_active",
             "password",
             "date_joined",
+            "has_password",
+            "activation_expires_at",
         ]
         read_only_fields = ["date_joined"]
+        # form posts leave out unticked checkboxes; a missing is_active must not deactivate
+        extra_kwargs = {"is_active": {"default": True}}
 
     def validate_password(self, value):
         validate_password(value)
@@ -207,8 +229,25 @@ class SchoolUserSerializer(serializers.ModelSerializer):
             raise serializers.ValidationError("This username is taken.")
         return value
 
+    def validate_admission_number(self, value):
+        value = value.strip()
+        if value:
+            clash = User.objects.filter(
+                school_id=self.context["request"].user.school_id, admission_number__iexact=value
+            )
+            if self.instance is not None:
+                clash = clash.exclude(pk=self.instance.pk)
+            if clash.exists():
+                raise serializers.ValidationError("Another student has this admission number.")
+        return value
+
     def validate(self, attrs):
         user = self.instance
+        role = attrs.get("role", user.role if user else None)
+        if attrs.get("admission_number") and role != User.Role.STUDENT:
+            raise serializers.ValidationError(
+                {"admission_number": "Only students have an admission number."}
+            )
         if user is None:
             if not attrs.get("password"):
                 raise serializers.ValidationError({"password": "Required when creating a user."})
@@ -239,6 +278,29 @@ class SchoolUserSerializer(serializers.ModelSerializer):
         return user
 
 
+class ActivateSerializer(serializers.Serializer):
+    username = serializers.CharField()
+    code = serializers.CharField(help_text="As printed, e.g. K7M2-QX9P (case and dash optional)")
+    new_password = serializers.CharField(write_only=True, style={"input_type": "password"})
+
+
+class PasswordResetRequestSerializer(serializers.Serializer):
+    login = serializers.CharField(help_text="Your username or email address")
+
+
+class PasswordResetConfirmSerializer(serializers.Serializer):
+    uid = serializers.CharField()
+    token = serializers.CharField()
+    new_password = serializers.CharField(write_only=True, style={"input_type": "password"})
+
+
+class ActivationCodeIssuedSerializer(serializers.Serializer):
+    user = serializers.IntegerField()
+    username = serializers.CharField()
+    code = serializers.CharField(help_text="Shown once; give it to the person")
+    expires_at = serializers.DateTimeField()
+
+
 class PasswordChangeSerializer(serializers.Serializer):
     current_password = serializers.CharField(write_only=True, style={"input_type": "password"})
     new_password = serializers.CharField(write_only=True, style={"input_type": "password"})
@@ -256,6 +318,9 @@ class PasswordChangeSerializer(serializers.Serializer):
 class GuardianshipSerializer(SameSchoolSerializerMixin, serializers.ModelSerializer):
     parent_name = serializers.CharField(source="parent.display_name", read_only=True)
     student_name = serializers.CharField(source="student.display_name", read_only=True)
+    student_admission_number = serializers.CharField(
+        source="student.admission_number", read_only=True
+    )
 
     class Meta:
         model = Guardianship
@@ -265,6 +330,7 @@ class GuardianshipSerializer(SameSchoolSerializerMixin, serializers.ModelSeriali
             "parent_name",
             "student",
             "student_name",
+            "student_admission_number",
             "relationship",
             "created_at",
         ]

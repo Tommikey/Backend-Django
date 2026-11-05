@@ -100,6 +100,7 @@ class SubmissionViewSet(
         "student__first_name",
         "student__last_name",
         "student__username",
+        "student__admission_number",
         "assessment__title",
     ]
     ordering_fields = ["submitted_at", "graded_at", "score", "student__last_name"]

@@ -2,6 +2,7 @@
 live (draft) from current scores.
 """
 
+from apps.accounts.refs import student_ref
 from apps.attendance.services import class_attendance, report_card_attendance
 
 from .models import TermResult
@@ -14,7 +15,7 @@ def _header(student, classroom, term, published, publication=None):
         "published": published,
         "published_at": publication.published_at if publication else None,
         "school": {"name": school.name, "system": school.system},
-        "student": {"id": student.pk, "name": student.display_name},
+        "student": student_ref(student),
         "classroom": {"id": classroom.pk, "name": classroom.name},
         "session": term.session.name,
         "term": {"id": term.pk, "name": term.name},

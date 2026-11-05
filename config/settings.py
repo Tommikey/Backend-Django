@@ -20,6 +20,9 @@ env = environ.Env(
     SECURE_HSTS_SECONDS=(int, 60 * 60 * 24 * 30),
     LOG_LEVEL=(str, "INFO"),
     NUM_PROXIES=(int, 0),
+    EMAIL_URL=(str, "consolemail://"),
+    DEFAULT_FROM_EMAIL=(str, "YAP <no-reply@localhost>"),
+    PASSWORD_RESET_URL=(str, "http://localhost:3000/reset-password"),
 )
 environ.Env.read_env(BASE_DIR / ".env")
 
@@ -114,6 +117,8 @@ REST_FRAMEWORK = {
         "login_user": "10/min",  # per username: password guessing
         "onboard": "10/hour",  # per IP: new schools
         "password": "10/hour",  # per user: guessing the current password with a stolen token
+        "reset_login": "3/hour",  # per username/email: reset emails to one person
+        "reset_ip": "30/hour",  # per IP: reset emails overall
     },
     # proxies in front of the app (1 behind a load balancer), so client IPs come from the
     # right X-Forwarded-For entry; 0 trusts only the socket address
@@ -144,6 +149,13 @@ SPECTACULAR_SETTINGS = {
     "COMPONENT_SPLIT_REQUEST": True,  # separate request/response shapes (write-only fields)
     "SCHEMA_PATH_PREFIX": r"/api/v1",
 }
+
+# email: e.g. smtp+tls://user:password@smtp.example.com:587 (console in development)
+vars().update(env.email_url("EMAIL_URL"))
+DEFAULT_FROM_EMAIL = env("DEFAULT_FROM_EMAIL")
+# the frontend page that finishes a password reset; ?uid=&token= are appended
+PASSWORD_RESET_URL = env("PASSWORD_RESET_URL")
+PASSWORD_RESET_TIMEOUT = 60 * 60 * 3  # reset links work for 3 hours
 
 CORS_ALLOW_ALL_ORIGINS = env("CORS_ALLOW_ALL_ORIGINS")
 CORS_ALLOWED_ORIGINS = env("CORS_ALLOWED_ORIGINS")  # e.g. https://app.yap.school

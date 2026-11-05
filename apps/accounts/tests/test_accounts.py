@@ -386,3 +386,67 @@ def test_user_search_ordering_and_page_size(auth, admin_user, make_user, other_s
 
     # ordering by something not offered is ignored, not an error
     assert client.get(USERS_URL, {"ordering": "password"}).status_code == 200
+
+
+# --- admission numbers -------------------------------------------------------------------------
+
+
+def test_admin_sets_admission_numbers(auth, admin_user, make_user, other_school):
+    client = auth(admin_user)
+    r = client.post(USERS_URL, {**new_user("student", "kid1"), "admission_number": " DSS/1 "})
+    assert r.status_code == 201 and r.json()["admission_number"] == "DSS/1"
+    clash = client.post(USERS_URL, {**new_user("student", "kid2"), "admission_number": "dss/1"})
+    assert clash.status_code == 400 and "admission_number" in clash.json()
+    teacher = client.post(USERS_URL, {**new_user("teacher", "t1"), "admission_number": "X"})
+    assert teacher.status_code == 400
+    # another school may use the same numbers
+    their_admin = make_user("admin", school=other_school)
+    theirs = {**new_user("student", "kid3"), "admission_number": "DSS/1"}
+    assert auth(their_admin).post(USERS_URL, theirs).status_code == 201
+    # found by search; a student sees theirs on me but can't change it
+    rows = results(auth(admin_user).get(USERS_URL, {"search": "dss/1"}).json())
+    assert [u["username"] for u in rows] == ["kid1"]
+    kid = User.objects.get(username="kid1")
+    me = auth(kid).patch("/api/v1/auth/me/", {"admission_number": "HACK"})
+    assert me.json()["admission_number"] == "DSS/1"
+
+
+def test_database_keeps_admission_numbers_unique_per_school(make_user):
+    from django.db import IntegrityError, transaction
+
+    a, b = make_user("student"), make_user("student")
+    a.admission_number = "N/1"
+    a.save()
+    b.admission_number = "n/1"
+    with pytest.raises(IntegrityError), transaction.atomic():
+        b.save()
+    b.admission_number = ""
+    b.save()
+    make_user("student").save()  # many blanks never clash
+
+
+def test_admission_number_shows_where_students_appear(auth, kit, admin_user, make_user):
+    kit.student.admission_number = "DSS/2025/007"
+    kit.student.save()
+    kit.classroom.form_teacher = kit.teacher
+    kit.classroom.save()
+    card = auth(admin_user).get("/api/v1/results/report-card/", {"student": kit.student.pk})
+    assert card.json()["student"]["admission_number"] == "DSS/2025/007"
+    sheet = auth(kit.teacher).get(
+        "/api/v1/results/score-sheet/", {"classroom": kit.classroom.pk, "subject": kit.subject.pk}
+    )
+    assert sheet.json()["rows"][0]["student"]["admission_number"] == "DSS/2025/007"
+    parent = make_user("parent")
+    Guardianship.objects.create(parent=parent, student=kit.student)
+    [child] = auth(parent).get("/api/v1/auth/me/").json()["children"]
+    assert child["admission_number"] == "DSS/2025/007"
+
+
+def test_form_posts_create_active_accounts(auth, admin_user):
+    # multipart (like an HTML form) without is_active: the account must still be active
+    r = auth(admin_user).post(USERS_URL, new_user("teacher", "formy"), format="multipart")
+    assert r.status_code == 201 and r.json()["is_active"] is True
+    r = auth(admin_user).post(
+        USERS_URL, {**new_user("teacher", "off"), "is_active": "false"}, format="multipart"
+    )
+    assert r.json()["is_active"] is False  # still possible on purpose

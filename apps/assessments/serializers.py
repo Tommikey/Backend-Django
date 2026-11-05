@@ -174,6 +174,9 @@ class SubmissionSerializer(serializers.ModelSerializer):
     assessment_type = serializers.CharField(source="assessment.type", read_only=True)
     max_points = serializers.IntegerField(source="assessment.max_points", read_only=True)
     student_name = serializers.CharField(source="student.display_name", read_only=True)
+    student_admission_number = serializers.CharField(
+        source="student.admission_number", read_only=True
+    )
     is_late = serializers.SerializerMethodField()
 
     class Meta:
@@ -186,6 +189,7 @@ class SubmissionSerializer(serializers.ModelSerializer):
             "max_points",
             "student",
             "student_name",
+            "student_admission_number",
             "answers",
             "text",
             "file",

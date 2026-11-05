@@ -7,6 +7,7 @@ from rest_framework.views import APIView
 from apps.accounts.access import InUse
 from apps.accounts.models import User
 from apps.accounts.permissions import IsAdmin
+from apps.accounts.refs import student_ref
 
 from . import openapi, report_cards
 from .access import (
@@ -102,7 +103,7 @@ class ScoreSheetView(APIView):
             entered = [v for v in marks.values() if v is not None]
             rows.append(
                 {
-                    "student": {"id": student.pk, "name": student.display_name},
+                    "student": student_ref(student),
                     "scores": {str(cid): dec(v) for cid, v in marks.items()},
                     "total": dec(sum(entered)) if entered else None,
                 }
@@ -272,7 +273,7 @@ class ClassResultsView(APIView):
     @staticmethod
     def row(student, totals, total, average, gpa, subjects_count, position, out_of):
         return {
-            "student": {"id": student.pk, "name": student.display_name},
+            "student": student_ref(student),
             "totals": totals,
             "total": dec(total),
             "average": dec(average),

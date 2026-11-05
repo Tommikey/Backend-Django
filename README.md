@@ -16,7 +16,7 @@ Built with Django 5.2, Django REST Framework, JWT auth (SimpleJWT) and PostgreSQ
 | Area | What's there |
 | --- | --- |
 | **Schools** | Public onboarding (school + first admin in one call), school settings, class levels, score split (e.g. CA1 20 + CA2 20 + Exam 60, must add up to 100), grade scale |
-| **People** | Students, teachers, parents and admins, all scoped to one school. Admins link parents to their children |
+| **People** | Students, teachers, parents and admins, all scoped to one school. Admins link parents to their children, or import everyone from a CSV |
 | **School year** | Academic sessions with their terms, subjects, class arms (JSS1A) with a form teacher, who teaches what to which class, which class each student is in |
 | **Learning** | Lessons per class, subject and term, with completion tracking and progress reports |
 | **Assessments** | Quizzes (auto-graded multiple choice) and assignments (graded by the teacher), with submissions |
@@ -86,7 +86,8 @@ The API is at `http://localhost:8000/api/v1/`, its interactive docs at
 ### Demo accounts
 
 `seed` creates three demo schools, one per system, each with a running school year, classes,
-lessons, assessments, a live class, two weeks of attendance and term scores (not yet published). Every password is
+lessons, assessments, a live class, two weeks of attendance and term scores (not yet published).
+Students have admission numbers made from the school's initials (`DSS/2025/001` and so on). Every password is
 `pass1234`.
 
 | School | System | Usernames |
@@ -116,6 +117,21 @@ device's session. `POST auth/password/` with `current_password` and `new_passwor
 own password and returns fresh tokens. Any password change, including an admin reset, signs the
 person out everywhere else.
 
+### Bringing people in
+
+Admins import students, teachers and parents from a CSV at `POST imports/people/` (template at
+`GET imports/people/template/`). The import previews by default, listing every problem by
+spreadsheet row; with `commit=true` it creates everyone at once, enrolls students in their class
+and links parents to their children. Blank usernames are made from names (`ada.obi`).
+
+Imported people have no password yet. Each gets a one-time **activation code** (e.g. `K7M2-QX9P`,
+valid 30 days), returned once for printing on login slips. On first sign-in they send their
+username, the code and a password of their choice to `POST auth/activate/`. An admin can issue a
+fresh code at `POST users/{id}/activation-code/`, which also serves as a password reset for
+people without email. People with an email address can reset their own password:
+`POST auth/password-reset/` emails a link to `PASSWORD_RESET_URL`, and the frontend finishes it
+at `POST auth/password-reset/confirm/`.
+
 `GET auth/me/` returns your profile plus everything a client needs to start: the school's
 settings, the current session and term, and your working context (a teacher's classes, a
 student's class, a parent's children). `GET dashboard/` returns what your role should see first:
@@ -130,10 +146,10 @@ All routes are under `/api/v1/`:
 
 | Area | Routes |
 | --- | --- |
-| Auth | `auth/token/`, `auth/token/refresh/`, `auth/logout/`, `auth/password/`, `auth/me/` |
+| Auth | `auth/token/`, `auth/token/refresh/`, `auth/logout/`, `auth/password/`, `auth/activate/`, `auth/password-reset/`, `auth/password-reset/confirm/`, `auth/me/` |
 | Dashboard | `dashboard/` |
 | Schools | `schools/onboard/`, `schools/me/`, `schools/levels/`, `schools/components/`, `schools/grade-bands/` |
-| People | `users/`, `guardianships/` |
+| People | `users/`, `users/{id}/activation-code/`, `guardianships/`, `imports/people/`, `imports/people/template/` |
 | School year | `academics/academic-sessions/`, `academics/terms/`, `academics/subjects/`, `academics/classrooms/`, `academics/teaching-assignments/`, `academics/enrollments/` |
 | Learning | `academics/lessons/`, `academics/progress/`, `stats/` |
 | Assessments | `assessments/`, `submissions/` |
@@ -180,8 +196,14 @@ Configuration comes from `.env` (see `.env.example`). Never commit `.env`.
 | `SECURE_HSTS_SECONDS` | 30 days | With `DEBUG=False` |
 | `NUM_PROXIES` | `0` | Proxies in front of the app (e.g. `1` behind a load balancer), so rate limits see real client IPs |
 | `LOG_LEVEL` | `INFO` | Logs go to stdout |
+| `EMAIL_URL` | `consolemail://` | Outgoing email, e.g. `smtp+tls://user:password@smtp.example.com:587`; the default prints emails to the console |
+| `DEFAULT_FROM_EMAIL` | `YAP <no-reply@localhost>` | |
+| `PASSWORD_RESET_URL` | `http://localhost:3000/reset-password` | The frontend page that finishes a reset; `?uid=&token=` are appended |
 
 ### Deploying with Docker
+
+Before the first production deploy (or starting the frontend), work through
+[docs/LAUNCH_CHECKLIST.md](docs/LAUNCH_CHECKLIST.md): settings to fill in, and decisions still open.
 
 ```bash
 cp .env.prod.example .env.prod        # fill in secrets, hosts and origins
