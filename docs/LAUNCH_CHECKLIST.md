@@ -24,6 +24,10 @@ off in the PR that handles them, and add new ones as they come up.
       (a very large school can hit the 30 s gunicorn timeout) and rate limits are per process.
       Redis keeps queued jobs on disk (`--appendonly yes`); with a managed Redis, turn on
       persistence too. Alert on a growing queue or failed jobs (`/admin/rq/`).
+- [ ] **Exactly one scheduler** (`rqcron config.cron`, the `cron` service): none means no live
+      class reminders; two means every reminder is queued twice. Workers can scale freely.
+- [ ] **Each school's time zone**: set from its system (Nigeria: Africa/Lagos). Check it for
+      schools outside those zones; it decides "today" for registers and times in notifications.
 - [ ] **Where uploaded files live**: downloads are access-checked either way. `FILE_STORAGE=local`
       keeps them in the `media` volume (one server only, and the volume must be backed up);
       `FILE_STORAGE=s3` uses a private bucket (`S3_*` settings), needed once there is more than
@@ -49,6 +53,11 @@ off in the PR that handles them, and add new ones as they come up.
       school too (e.g. a school code on the login page). Decide if students should have that.
 - [ ] **Registers**: one register a day, taken by the form teacher. Decide whether schools need
       morning/afternoon registers, or registers per lesson taken by subject teachers.
+- [ ] **SMS or WhatsApp for parents**: notifications are in-app and email only. Many parents
+      may not read email; decide whether absences and report cards should also go by SMS or
+      WhatsApp (a paid provider, e.g. Termii or Twilio), and who pays for it.
+- [ ] **Who hears about new work**: today only students. Decide whether parents should too (it
+      could be a lot of email), perhaps as a weekly digest instead.
 - [ ] **Email for teachers and parents**: optional today. Decide whether imports should require it
       for staff, so they can reset their own passwords.
 
@@ -70,6 +79,9 @@ off in the PR that handles them, and add new ones as they come up.
       protected, but other booleans in a full `PUT` are not.
 - [ ] **Publishing is a job**: `POST results/publish/` returns `202` and a job; poll
       `jobs/{id}/` (every second or two) and show progress until `done` or `failed`.
+- [ ] **Notifications**: show the bell count from `auth/me/` (`unread_notifications`), refresh it
+      with `notifications/unread-count/`, open each notification's subject from its `data`, and
+      give everyone the email on/off switch (`notifications/settings/`).
 - [ ] Generate a typed client from `/api/schema/` rather than hand-writing request shapes.
 - [ ] Lists: `?search=`, `?ordering=`, `?page_size=` (at most 200).
 

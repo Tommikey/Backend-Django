@@ -23,6 +23,7 @@ from apps.accounts.access import (
     SchoolScopedMixin,
 )
 from apps.accounts.permissions import IsStudent
+from apps.notifications import events
 
 from .models import Answer, Assessment, Submission
 from .serializers import (
@@ -93,6 +94,10 @@ class AssessmentViewSet(
             submission.graded_at = timezone.now()
             submission.save(update_fields=["score", "graded_at"])
         return Response(SubmissionSerializer(submission).data, status=201)
+
+    def perform_create(self, serializer):
+        super().perform_create(serializer)
+        events.work_set(serializer.instance)
 
 
 @child_filter

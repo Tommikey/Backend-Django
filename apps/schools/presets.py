@@ -26,6 +26,7 @@ PRESETS = {
         ],
         "show_position": True,
         "use_gpa": False,
+        "timezone": "Africa/Lagos",
     },
     School.System.UK: {
         "levels": [f"Year {n}" for n in range(7, 14)],
@@ -42,6 +43,7 @@ PRESETS = {
         ],
         "show_position": False,
         "use_gpa": False,
+        "timezone": "Europe/London",
     },
     School.System.US: {
         "levels": [f"Grade {n}" for n in range(6, 13)],
@@ -56,6 +58,7 @@ PRESETS = {
         ],
         "show_position": False,
         "use_gpa": True,
+        "timezone": "America/New_York",
     },
 }
 
@@ -66,7 +69,8 @@ def apply_preset(school):
     school.term_labels = list(preset["term_labels"])
     school.show_position = preset["show_position"]
     school.use_gpa = preset["use_gpa"]
-    school.save(update_fields=["term_labels", "show_position", "use_gpa"])
+    school.timezone = preset["timezone"]
+    school.save(update_fields=["term_labels", "show_position", "use_gpa", "timezone"])
 
     Level.objects.bulk_create(
         Level(school=school, name=name, order=i) for i, name in enumerate(preset["levels"], 1)

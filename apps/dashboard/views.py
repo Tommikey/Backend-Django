@@ -22,7 +22,7 @@ class DashboardView(APIView):
     def get(self, request):
         user = request.user
         term = current_term(user.school_id) if user.school_id else None
-        today = timezone.localdate()
+        today = user.school.today() if user.school_id else timezone.localdate()
         blocks = {
             User.Role.ADMIN: ("admin", lambda: services.admin_block(user, term, today)),
             User.Role.TEACHER: ("teacher", lambda: services.teacher_block(user, term, today)),

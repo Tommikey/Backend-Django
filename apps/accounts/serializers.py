@@ -40,6 +40,7 @@ class _SchoolDetails(_Ref):
     show_position = serializers.BooleanField()
     use_gpa = serializers.BooleanField()
     term_labels = serializers.ListField(child=serializers.CharField())
+    timezone = serializers.CharField()
 
 
 class _TermRef(_Ref):
@@ -74,6 +75,7 @@ class MeSerializer(UserSerializer):
     teaching = serializers.SerializerMethodField()
     classroom = serializers.SerializerMethodField()
     children = serializers.SerializerMethodField()
+    unread_notifications = serializers.SerializerMethodField()
 
     class Meta(UserSerializer.Meta):
         fields = [
@@ -85,7 +87,11 @@ class MeSerializer(UserSerializer):
             "teaching",
             "classroom",
             "children",
+            "unread_notifications",
         ]
+
+    def get_unread_notifications(self, user) -> int:
+        return user.notifications.filter(read_at__isnull=True).count()
 
     def _term(self, user):
         if not hasattr(self, "_cached_term"):
@@ -108,6 +114,7 @@ class MeSerializer(UserSerializer):
             "show_position": school.show_position,
             "use_gpa": school.use_gpa,
             "term_labels": school.term_labels,
+            "timezone": school.timezone,
         }
 
     @extend_schema_field(_Ref(allow_null=True))

@@ -49,3 +49,10 @@ class LiveClassViewSet(
         if self.request.query_params.get("upcoming") in {"1", "true", "True"}:
             qs = qs.filter(starts_at__gte=timezone.now())
         return qs
+
+    def perform_update(self, serializer):
+        moved = serializer.validated_data.get("starts_at", serializer.instance.starts_at)
+        if moved != serializer.instance.starts_at:
+            serializer.save(reminded_at=None)  # remind again before the new time
+        else:
+            serializer.save()

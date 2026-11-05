@@ -1,3 +1,4 @@
+import zoneinfo
 from decimal import Decimal
 
 from django.contrib.auth.password_validation import validate_password
@@ -23,10 +24,16 @@ class SchoolSerializer(serializers.ModelSerializer):
             "show_position",
             "use_gpa",
             "term_labels",
+            "timezone",
             "created_at",
         ]
         # the system only picks the starting preset; changing it later would mean nothing
         read_only_fields = ["slug", "system", "created_at"]
+
+    def validate_timezone(self, value):
+        if value not in zoneinfo.available_timezones():
+            raise serializers.ValidationError('Give an IANA time zone, e.g. "Africa/Lagos".')
+        return value
 
     def validate_term_labels(self, value):
         if (

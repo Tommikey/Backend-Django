@@ -1,7 +1,6 @@
 """Request bodies and query strings for the attendance endpoints (responses are built in
 views.py)."""
 
-from django.utils import timezone
 from rest_framework import serializers
 
 from apps.academics.models import Classroom
@@ -12,20 +11,25 @@ from apps.accounts.models import User
 from .models import AttendanceRecord
 
 
-def today():
-    return timezone.localdate()
+class SchoolToday:
+    """Default for a date field: today where the requesting user's school is."""
+
+    requires_context = True
+
+    def __call__(self, field):
+        return field.context["request"].user.school.today()
 
 
 class RegisterQuerySerializer(SameSchoolSerializerMixin, serializers.Serializer):
     """?classroom=&date=&term= (date defaults to today, term to the current one)."""
 
     classroom = serializers.PrimaryKeyRelatedField(queryset=Classroom.objects.all())
-    date = serializers.DateField(default=today)
+    date = serializers.DateField(default=SchoolToday())
     term = term_field()
 
     def validate(self, attrs):
         date, term = attrs["date"], attrs["term"]
-        if date > today():
+        if date > self.context["request"].user.school.today():
             raise serializers.ValidationError({"date": "The register can't be taken ahead."})
         if (term.starts_on and date < term.starts_on) or (term.ends_on and date > term.ends_on):
             raise serializers.ValidationError({"date": f"{date} is outside {term}."})

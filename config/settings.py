@@ -60,6 +60,7 @@ INSTALLED_APPS = [
     "apps.attendance",
     "apps.dashboard",
     "apps.jobs",
+    "apps.notifications",
 ]
 
 MIDDLEWARE = [

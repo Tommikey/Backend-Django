@@ -17,6 +17,7 @@ from rest_framework.views import APIView
 from apps.accounts.access import InUse
 from apps.accounts.models import User
 from apps.accounts.refs import student_ref
+from apps.notifications import events
 from apps.results.access import can_read_published_card, can_review_class
 from apps.results.serializers import ClassTermSerializer, StudentTermSerializer
 from apps.results.services import class_students, enrollment_for, is_published, lock_term
@@ -78,6 +79,17 @@ class RegisterView(APIView):
         if elsewhere.exists():
             raise ValidationError({"date": f"{date} is already recorded in another term."})
 
+        was_absent = set(
+            AttendanceRecord.objects.filter(
+                student__in=students, date=date, status=AttendanceRecord.Status.ABSENT
+            ).values_list("student_id", flat=True)
+        )
+        newly_absent = [
+            mark["student"]
+            for mark in data["marks"]
+            if mark["status"] == AttendanceRecord.Status.ABSENT
+            and mark["student"].pk not in was_absent
+        ]
         for mark in data["marks"]:
             key = {"student": mark["student"], "date": date}
             if mark["status"] is None:
@@ -93,6 +105,7 @@ class RegisterView(APIView):
                         "marked_by": request.user,
                     },
                 )
+        events.marked_absent(classroom, date, newly_absent)
         return Response(self.register(classroom, date, term))
 
     @staticmethod

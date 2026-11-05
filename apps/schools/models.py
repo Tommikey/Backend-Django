@@ -4,7 +4,10 @@ Everything that differs between the Nigerian, British and US systems is data on 
 filled in from a preset at onboarding (see presets.py) and editable by the school's admin.
 """
 
+from zoneinfo import ZoneInfo
+
 from django.db import models
+from django.utils import timezone as tz
 
 
 class School(models.Model):
@@ -21,11 +24,24 @@ class School(models.Model):
     use_gpa = models.BooleanField(default=False)
     # names of the terms in one academic session, in order, e.g. ["First Term", ...]
     term_labels = models.JSONField(default=list)
+    # IANA name, e.g. "Africa/Lagos": what "today" means for registers, and the times in
+    # notifications. The preset sets it; the admin can change it.
+    timezone = models.CharField(max_length=64, default="UTC")
     is_active = models.BooleanField(default=True)
     created_at = models.DateTimeField(auto_now_add=True)
 
     def __str__(self):
         return self.name
+
+    @property
+    def zone(self):
+        return ZoneInfo(self.timezone)
+
+    def today(self):
+        return tz.localdate(timezone=self.zone)
+
+    def local(self, moment):
+        return moment.astimezone(self.zone)
 
     def score_split(self, session):
         """The components scores are entered against in ``session`` (None: the default)."""

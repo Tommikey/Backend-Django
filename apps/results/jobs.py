@@ -2,6 +2,7 @@
 
 from apps.academics.models import Term
 from apps.jobs.queue import JobRefused
+from apps.notifications import events
 
 from .models import TermResult
 from .services import is_published, lock_term, publish_term
@@ -13,6 +14,7 @@ def publish_results(job):
     if is_published(term):
         raise JobRefused("This term is already published.")
     publication = publish_term(term, job.created_by)
+    events.results_published(term)
     return {
         "term": term.pk,
         "published_at": publication.published_at.isoformat(),
