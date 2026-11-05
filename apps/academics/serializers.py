@@ -241,9 +241,10 @@ class EnrollmentSerializer(SameSchoolSerializerMixin, serializers.ModelSerialize
             "student",
             "student_name",
             "student_admission_number",
+            "outcome",
             "created_at",
         ]
-        read_only_fields = ["created_at"]
+        read_only_fields = ["outcome", "created_at"]
         validators = [
             UniqueTogetherValidator(
                 queryset=Enrollment.objects.all(),
@@ -296,3 +297,58 @@ class CompletionSerializer(serializers.ModelSerializer):
     class Meta:
         model = Completion
         fields = ["id", "lesson", "lesson_title", "completed_at"]
+
+
+# --- moving to the next session --------------------------------------------------------------
+
+
+class RolloverDecisionSerializer(serializers.Serializer):
+    student = serializers.PrimaryKeyRelatedField(queryset=User.objects.all())
+    action = serializers.ChoiceField(choices=["promote", "repeat", "move", "graduate", "leave"])
+    classroom = serializers.PrimaryKeyRelatedField(
+        queryset=Classroom.objects.all(),
+        required=False,
+        allow_null=True,
+        help_text="Where they go (required for move; overrides the default for promote/repeat)",
+    )
+
+
+class RolloverSerializer(SameSchoolSerializerMixin, serializers.Serializer):
+    from_session = session_field()
+    to_session = serializers.PrimaryKeyRelatedField(queryset=AcademicSession.objects.all())
+    decisions = RolloverDecisionSerializer(many=True, required=False, default=list)
+    copy_teaching_assignments = serializers.BooleanField(default=True)
+    make_current = serializers.BooleanField(
+        default=False, help_text="Switch the school to the new session's first term"
+    )
+    commit = serializers.BooleanField(default=False, help_text="false: preview only")
+
+    def validate(self, attrs):
+        source, target = attrs["from_session"], attrs["to_session"]
+        if source == target:
+            raise serializers.ValidationError(
+                {
+                    "to_session": f"This is the session students are coming from ({source}). "
+                    "from_session defaults to the current session; give it explicitly after "
+                    "switching to the new one."
+                }
+            )
+        school_id = self.context["request"].user.school_id
+        enrolled = set(
+            Enrollment.objects.filter(session=source).values_list("student_id", flat=True)
+        )
+        decisions, errors = {}, []
+        for i, d in enumerate(attrs["decisions"], 1):
+            student, classroom = d["student"], d.get("classroom")
+            # nested IDs aren't limited to the school by the mixin: check them here
+            if student.school_id != school_id or student.pk not in enrolled:
+                errors.append(f"Decision {i}: student {student.pk} isn't in a class in {source}.")
+            elif student.pk in decisions:
+                errors.append(f"Decision {i}: student {student.pk} given twice.")
+            if classroom is not None and classroom.school_id != school_id:
+                errors.append(f"Decision {i}: unknown classroom {classroom.pk}.")
+            decisions[student.pk] = {"action": d["action"], "classroom": classroom}
+        if errors:
+            raise serializers.ValidationError({"decisions": errors})
+        attrs["decisions"] = decisions
+        return attrs

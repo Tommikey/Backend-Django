@@ -8,6 +8,7 @@ from .views import (
     EnrollmentViewSet,
     LessonViewSet,
     ProgressView,
+    RolloverView,
     SubjectViewSet,
     TeachingAssignmentViewSet,
     TermViewSet,
@@ -28,5 +29,6 @@ router.register("academics/lessons", LessonViewSet, basename="lesson")
 
 urlpatterns = router.urls + [
     path("academics/progress/", ProgressView.as_view(), name="progress"),
+    path("academics/rollover/", RolloverView.as_view(), name="rollover"),
     path("stats/", StatsView.as_view(), name="stats"),
 ]
