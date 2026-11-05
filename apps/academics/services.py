@@ -1,16 +1,31 @@
 from django.db import transaction
+from django.db.models import F
 
 from .models import AcademicSession, Term
 
 
 @transaction.atomic
 def create_session(school, name, starts_on=None, ends_on=None, make_current=False):
-    """Create a session with one term per name in the school's term_labels."""
+    """Create a session with one term per name in the school's term_labels, and a copy of the
+    latest session's score split (the school's default split for its first session)."""
+    from apps.schools.models import AssessmentComponent
+
+    previous = (
+        AcademicSession.objects.filter(school=school, components__isnull=False)
+        .order_by(F("starts_on").desc(nulls_last=True), "-pk")  # latest dated, else newest
+        .first()
+    )
     session = AcademicSession.objects.create(
         school=school, name=name, starts_on=starts_on, ends_on=ends_on
     )
     Term.objects.bulk_create(
         Term(session=session, name=label, order=i) for i, label in enumerate(school.term_labels, 1)
+    )
+    AssessmentComponent.objects.bulk_create(
+        AssessmentComponent(
+            school=school, session=session, name=c.name, max_score=c.max_score, order=c.order
+        )
+        for c in school.score_split(previous)
     )
     if make_current:
         make_term_current(session.terms.order_by("order").first())

@@ -10,6 +10,7 @@ class LevelInline(admin.TabularInline):
 
 class AssessmentComponentInline(admin.TabularInline):
     model = AssessmentComponent
+    fields = ["session", "name", "max_score", "order"]
     extra = 0
 
 

@@ -27,6 +27,10 @@ class School(models.Model):
     def __str__(self):
         return self.name
 
+    def score_split(self, session):
+        """The components scores are entered against in ``session`` (None: the default)."""
+        return AssessmentComponent.objects.filter(school=self, session=session).order_by("order")
+
 
 class Level(models.Model):
     """A year group: JSS1, Year 7, Grade 6..."""
@@ -46,9 +50,22 @@ class Level(models.Model):
 
 
 class AssessmentComponent(models.Model):
-    """One part of a subject's term score, e.g. CA1 (20) or Exam (60). Maxima sum to 100."""
+    """One part of a subject's term score, e.g. CA1 (20) or Exam (60). Maxima sum to 100.
 
-    school = models.ForeignKey(School, on_delete=models.CASCADE, related_name="components")
+    Each session has its own split (``session``), copied from the previous session when a
+    session is created, so changing next year's split never touches this year's marks. Rows
+    with no session are the school's default, used only until its first session exists.
+    Use ``School.score_split(session)`` rather than ``school.all_components``.
+    """
+
+    school = models.ForeignKey(School, on_delete=models.CASCADE, related_name="all_components")
+    session = models.ForeignKey(
+        "academics.AcademicSession",
+        null=True,
+        blank=True,
+        on_delete=models.CASCADE,
+        related_name="components",
+    )
     name = models.CharField(max_length=50)
     max_score = models.PositiveSmallIntegerField()
     order = models.PositiveSmallIntegerField()
@@ -56,7 +73,11 @@ class AssessmentComponent(models.Model):
     class Meta:
         ordering = ["order"]
         constraints = [
-            models.UniqueConstraint(fields=["school", "name"], name="unique_school_component"),
+            models.UniqueConstraint(
+                fields=["school", "session", "name"],
+                name="unique_component_in_split",
+                nulls_distinct=False,  # the default split (no session) is unique too
+            ),
         ]
 
     def __str__(self):

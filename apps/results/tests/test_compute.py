@@ -29,7 +29,7 @@ def build(school, make_user, n_students=4, subjects=("Mathematics", "English")):
         subject_objs[name] = Subject.objects.create(school=school, name=name)
         assign(teacher, classroom, subject_objs[name])
     term = school.academic_sessions.get(is_current=True).terms.get(is_current=True)
-    components = {c.name: c for c in school.components.all()}
+    components = {c.name: c for c in school.score_split(term.session)}
     return SimpleNamespace(
         school=school,
         classroom=classroom,

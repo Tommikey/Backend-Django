@@ -1,12 +1,16 @@
 from django.db import transaction
+from django.db.models import ProtectedError
 from django.http import Http404
-from drf_spectacular.utils import extend_schema, extend_schema_view
+from drf_spectacular.utils import OpenApiParameter, extend_schema, extend_schema_view
 from rest_framework import generics, status, viewsets
+from rest_framework.exceptions import ValidationError
 from rest_framework.permissions import AllowAny, IsAuthenticated
 from rest_framework.response import Response
 from rest_framework.throttling import ScopedRateThrottle
 from rest_framework.views import APIView
 
+from apps.academics.models import AcademicSession
+from apps.academics.rules import current_session
 from apps.accounts.access import InUse, RolePermissionsMixin, SafeDestroyMixin, SchoolScopedMixin
 from apps.accounts.permissions import IsAdmin
 from apps.accounts.serializers import UserSerializer
@@ -93,14 +97,18 @@ class ReplaceAllConfigView(APIView):
         return self.model.objects.filter(school_id=self.request.user.school_id)
 
     def get(self, request):
-        return Response({self.key: self.item_serializer(self.get_items(), many=True).data})
+        items = self.item_serializer(self.get_items(), many=True).data
+        return Response({**self.extra_response(), self.key: items})
 
     @transaction.atomic
     def put(self, request):
         serializer = self.set_serializer(data=request.data)
         serializer.is_valid(raise_exception=True)
         self.check_replaceable(request)
-        self.get_items().delete()
+        try:
+            self.get_items().delete()
+        except ProtectedError as exc:  # something came to depend on it meanwhile
+            raise InUse() from exc
         self.model.objects.bulk_create(
             self.model(school=request.user.school, **self.extra_fields(i), **item)
             for i, item in enumerate(serializer.validated_data[self.key], 1)
@@ -110,30 +118,74 @@ class ReplaceAllConfigView(APIView):
     def extra_fields(self, position):
         return {}
 
+    def extra_response(self):
+        return {}
+
     def check_replaceable(self, request):
         """Hook: refuse the replacement (raise) when existing data depends on the old set."""
 
 
+SESSION_PARAM = OpenApiParameter(
+    "session",
+    int,
+    description="Whose split: a session's id. Default: the current session (the school's "
+    "default split if it has no session yet).",
+)
+
+
 @extend_schema_view(
-    get=extend_schema(responses=ComponentSetSerializer),
-    put=extend_schema(request=ComponentSetSerializer, responses=ComponentSetSerializer),
+    get=extend_schema(parameters=[SESSION_PARAM], responses=openapi.ScoreSplitSerializer),
+    put=extend_schema(
+        parameters=[SESSION_PARAM],
+        request=ComponentSetSerializer,
+        responses=openapi.ScoreSplitSerializer,
+    ),
 )
 class ComponentsView(ReplaceAllConfigView):
-    """How a subject's term score is split, e.g. CA1 20 + CA2 20 + Exam 60."""
+    """How a subject's term score is split in a session, e.g. CA1 20 + CA2 20 + Exam 60.
+
+    Each session has its own split, copied from the previous session when it is created, so
+    next year's can be changed (?session=<next>) without touching this year's marks. A split
+    is locked once scores have been entered against it.
+    """
 
     model = AssessmentComponent
     item_serializer = AssessmentComponentSerializer
     set_serializer = ComponentSetSerializer
     key = "components"
 
+    def split_session(self):
+        if not hasattr(self, "_split_session"):
+            school_id = self.request.user.school_id
+            raw = self.request.query_params.get("session")
+            if raw:
+                if not raw.isdigit():
+                    raise ValidationError({"session": "Must be an ID (a whole number)."})
+                session = AcademicSession.objects.filter(school_id=school_id, pk=raw).first()
+                if session is None:
+                    raise Http404("No such session.")
+            else:
+                session = current_session(school_id)
+            self._split_session = session
+        return self._split_session
+
+    def get_items(self):
+        return self.request.user.school.score_split(self.split_session())
+
     def extra_fields(self, position):
-        return {"order": position}  # the order they were sent in
+        # in the order they were sent, in the chosen session's split
+        return {"order": position, "session": self.split_session()}
+
+    def extra_response(self):
+        session = self.split_session()
+        return {"session": {"id": session.pk, "name": session.name} if session else None}
 
     def check_replaceable(self, request):
-        if Score.objects.filter(component__school_id=request.user.school_id).exists():
+        if Score.objects.filter(component__in=self.get_items()).exists():
+            session = self.split_session()
             raise InUse(
-                "Scores have already been entered with the current split, so it can't be "
-                "replaced. Clear those scores first."
+                f"Scores have already been entered with {session or 'this'} split, so it "
+                "can't be replaced. Clear those scores, or change the next session's split."
             )
 
 

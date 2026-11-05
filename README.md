@@ -15,7 +15,7 @@ Built with Django 5.2, Django REST Framework, JWT auth (SimpleJWT) and PostgreSQ
 
 | Area | What's there |
 | --- | --- |
-| **Schools** | Public onboarding (school + first admin in one call), school settings, class levels, score split (e.g. CA1 20 + CA2 20 + Exam 60, must add up to 100), grade scale |
+| **Schools** | Public onboarding (school + first admin in one call), school settings, class levels, a score split per session (e.g. CA1 20 + CA2 20 + Exam 60, must add up to 100), grade scale |
 | **People** | Students, teachers, parents and admins, all scoped to one school. Admins link parents to their children, or import everyone from a CSV |
 | **School year** | Academic sessions with their terms, subjects, class arms (JSS1A) with a form teacher, who teaches what to which class, which class each student is in, and moving everyone into the next session |
 | **Learning** | Lessons per class, subject and term, with completion tracking and progress reports |
@@ -116,6 +116,13 @@ a new refresh token (the old one stops working). `POST auth/logout/` with `{"ref
 device's session. `POST auth/password/` with `current_password` and `new_password` changes your
 own password and returns fresh tokens. Any password change, including an admin reset, signs the
 person out everywhere else.
+
+### Score splits
+
+Each session has its own split of a subject's score (`schools/components/`, `?session=` to pick
+one; the current session by default). A new session starts with a copy of the latest session's
+split, so changing next year's never touches this year's marks; a split locks once scores are
+entered against it. Report cards print the split their term used.
 
 ### Moving to a new session
 

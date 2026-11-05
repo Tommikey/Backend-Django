@@ -17,7 +17,7 @@ def filled(auth, kit, admin_user, make_user):
     """kit with marks, a comment, a register day, the teacher as form teacher, a parent."""
     kit.classroom.form_teacher = kit.teacher
     kit.classroom.save()
-    comps = list(kit.school.components.order_by("order"))
+    comps = list(kit.school.score_split(kit.session))
     auth(kit.teacher).put(
         "/api/v1/results/score-sheet/",
         {

@@ -17,7 +17,7 @@ COMPONENTS_URL = "/api/v1/schools/components/"
 
 
 def components(kit):
-    return {c.name: c for c in kit.school.components.all()}
+    return {c.name: c for c in kit.school.score_split(kit.session)}
 
 
 def sheet_body(kit, student=None, **marks):
@@ -246,7 +246,7 @@ def test_score_split_locked_once_scores_exist(auth, kit, admin_user):
     new = {"components": [{"name": "CA", "max_score": 30}, {"name": "Exam", "max_score": 70}]}
     r = auth(admin_user).put(COMPONENTS_URL, new, format="json")
     assert r.status_code == 409
-    assert kit.school.components.count() == 3
+    assert kit.school.score_split(kit.session).count() == 3
     Score.objects.all().delete()
     assert auth(admin_user).put(COMPONENTS_URL, new, format="json").status_code == 200
 

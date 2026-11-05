@@ -145,7 +145,7 @@ def test_final_level_can_repeat_and_latest_average_shows(auth, admin_user, year,
     from apps.results.models import Score
 
     english = Subject.objects.create(school=year.school, name="English")
-    component = year.school.components.first()
+    component = year.school.score_split(year.current).first()
     Score.objects.create(
         student=year.dayo, subject=english, term=term, component=component, value=18
     )

@@ -21,7 +21,7 @@ def school_kit(school, term, make_user):
     scored students who have submitted."""
     teacher = make_user("teacher")
     subjects = [Subject.objects.create(school=school, name=f"Subject {i}") for i in range(2)]
-    components = list(school.components.all())
+    components = list(school.score_split(term.session))
 
     def add_class():
         room = make_classroom(school, str(school.classrooms.count()))
