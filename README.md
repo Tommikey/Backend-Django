@@ -48,7 +48,10 @@ Teachers enter marks per component on a score sheet. Until the term is published
 form teacher can preview live draft report cards. Publishing snapshots every report card — totals,
 grades, class averages, positions or GPA, and the grade scale in force — and locks scores and
 comments, so a published card never changes if the school edits its settings later. An admin can
-unpublish a term to make corrections. Publishing runs as a background job (see
+unpublish a term to make corrections. Cards print as A4 PDFs: one student's at
+`results/report-card/pdf/` (same access as the card), or a whole class's in one document at
+`results/report-cards/pdf/?classroom=` for admins and the form teacher; drafts are marked DRAFT,
+and `?download=true` saves instead of opening. Publishing runs as a background job (see
 [Background jobs](#background-jobs)).
 
 ### Attendance in brief
@@ -242,7 +245,7 @@ All routes are under `/api/v1/`:
 | Learning | `academics/lessons/`, `academics/progress/`, `stats/` |
 | Assessments | `assessments/`, `submissions/` |
 | Live classes | `live-classes/` |
-| Results | `results/score-sheet/`, `results/comments/`, `results/class-results/`, `results/report-card/`, `results/publish/`, `results/unpublish/` |
+| Results | `results/score-sheet/`, `results/comments/`, `results/class-results/`, `results/report-card/`, `results/report-card/pdf/`, `results/report-cards/pdf/`, `results/publish/`, `results/unpublish/` |
 | Attendance | `attendance/register/`, `attendance/summary/`, `attendance/student/` |
 | Jobs | `jobs/` |
 | Notifications | `notifications/`, `notifications/settings/` |

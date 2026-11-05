@@ -1,5 +1,8 @@
 from django.db import transaction
-from drf_spectacular.utils import extend_schema
+from django.http import HttpResponse
+from django.utils.http import content_disposition_header
+from drf_spectacular.types import OpenApiTypes
+from drf_spectacular.utils import OpenApiParameter, extend_schema
 from rest_framework.exceptions import NotFound, PermissionDenied
 from rest_framework.response import Response
 from rest_framework.views import APIView
@@ -14,7 +17,7 @@ from apps.jobs import queue as jobs
 from apps.jobs.models import Job
 from apps.jobs.serializers import JobSerializer
 
-from . import openapi, report_cards
+from . import openapi, pdf, report_cards
 from .access import (
     can_enter_scores,
     can_read_published_card,
@@ -254,6 +257,57 @@ class UnpublishView(APIView):
         return Response({"term": term.pk, "published": False})
 
 
+def find_card(user, student, term):
+    """The report card ``user`` may read, as a dict (see report_cards.py), or a 404.
+
+    A published card stands on its own: it stays readable after the student leaves the class,
+    so it is looked up (and authorised) by the class stored on it. Before publishing, admins
+    and the form teacher get a live draft.
+    """
+    publication = Publication.objects.filter(term=term).first()
+    if publication is not None:
+        result = (
+            TermResult.objects.select_related("student", "classroom__level", "term__session")
+            .prefetch_related("subject_results")
+            .filter(student=student, term=term)
+            .first()
+        )
+        if result is None or not can_read_published_card(user, student, result.classroom):
+            raise NotFound("No report card for this student and term.")
+        return report_cards.from_snapshot(result, publication)
+
+    enrollment = enrollment_for(student, term.session)
+    if enrollment is None:
+        raise NotFound("No report card for this student and term.")
+    classroom = enrollment.classroom
+    if can_review_class(user, classroom):
+        return report_cards.live(student, classroom, term)
+    raise NotFound("Results for this term are not published yet.")
+
+
+def card_target(request):
+    user = request.user
+    data = validated(StudentTermSerializer, request, request.query_params)
+    student = data.get("student") or (user if user.role == User.Role.STUDENT else None)
+    if student is None:
+        raise NotFound("Say which student (?student=<id>).")
+    return student, data["term"]
+
+
+def pdf_response(content, name, request):
+    response = HttpResponse(content, content_type="application/pdf")
+    download = request.query_params.get("download") in ("1", "true")
+    response["Content-Disposition"] = content_disposition_header(download, name)
+    response["Cache-Control"] = "private, no-store"
+    return response
+
+
+DOWNLOAD_PARAM = OpenApiParameter(
+    "download", bool, description="true: save as a file instead of opening in the browser."
+)
+PDF = {(200, "application/pdf"): OpenApiTypes.BINARY}
+
+
 class ReportCardView(APIView):
     """GET ?student=&term= (students may omit student; term defaults to the current one).
 
@@ -263,34 +317,48 @@ class ReportCardView(APIView):
 
     @extend_schema(parameters=[StudentTermSerializer], responses=openapi.ReportCardSerializer)
     def get(self, request):
-        user = request.user
-        data = validated(StudentTermSerializer, request, request.query_params)
-        term = data["term"]
-        student = data.get("student") or (user if user.role == User.Role.STUDENT else None)
-        if student is None:
-            raise NotFound("Say which student (?student=<id>).")
+        student, term = card_target(request)
+        return Response(find_card(request.user, student, term))
 
-        # a published card stands on its own: it stays readable after the student leaves
-        # the class, so it is looked up (and authorised) by the class stored on it
+
+class ReportCardPdfView(APIView):
+    """GET ?student=&term=&download=: the same report card as a printable PDF (A4). Drafts
+    are marked DRAFT."""
+
+    @extend_schema(parameters=[StudentTermSerializer, DOWNLOAD_PARAM], responses=PDF)
+    def get(self, request):
+        student, term = card_target(request)
+        card = find_card(request.user, student, term)
+        name = pdf.filename(student.display_name, f"{term.name} {term.session.name}")
+        return pdf_response(pdf.render([card], title=name[:-4]), name, request)
+
+
+class ClassReportCardsPdfView(APIView):
+    """GET ?classroom=&term=&download=: every report card of a class in one PDF, a page each,
+    in name order, for printing (admins and the form teacher). Published: the stored cards of
+    the students who were in the class; before that, drafts of those enrolled now."""
+
+    @extend_schema(parameters=[ClassTermSerializer, DOWNLOAD_PARAM], responses=PDF)
+    def get(self, request):
+        data = validated(ClassTermSerializer, request, request.query_params)
+        classroom, term = data["classroom"], data["term"]
+        if not can_review_class(request.user, classroom):
+            raise PermissionDenied("Only admins and the form teacher print the class's cards.")
         publication = Publication.objects.filter(term=term).first()
         if publication is not None:
-            result = (
+            results = (
                 TermResult.objects.select_related("student", "classroom__level", "term__session")
                 .prefetch_related("subject_results")
-                .filter(student=student, term=term)
-                .first()
+                .filter(term=term, classroom=classroom)
+                .order_by("student__last_name", "student__first_name", "student__username")
             )
-            if result is None or not can_read_published_card(user, student, result.classroom):
-                raise NotFound("No report card for this student and term.")
-            return Response(report_cards.from_snapshot(result, publication))
-
-        enrollment = enrollment_for(student, term.session)
-        if enrollment is None:
-            raise NotFound("No report card for this student and term.")
-        classroom = enrollment.classroom
-        if can_review_class(user, classroom):
-            return Response(report_cards.live(student, classroom, term))
-        raise NotFound("Results for this term are not published yet.")
+            cards = [report_cards.from_snapshot(r, publication) for r in results]
+        else:
+            cards = report_cards.live_class(
+                classroom, term, class_students(classroom, term.session)
+            )
+        name = pdf.filename(classroom.name, f"{term.name} {term.session.name}", "report cards")
+        return pdf_response(pdf.render(cards, title=name[:-4]), name, request)
 
 
 class ClassResultsView(APIView):
