@@ -9,3 +9,5 @@ gunicorn>=23
 whitenoise>=6.9
 drf-spectacular>=0.28
 django-storages[s3]>=1.14
+django-rq>=3.0
+redis>=5

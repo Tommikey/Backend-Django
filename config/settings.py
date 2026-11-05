@@ -28,6 +28,7 @@ env = environ.Env(
     S3_ENDPOINT_URL=(str, ""),
     S3_REGION=(str, ""),
     S3_ADDRESSING_STYLE=(str, "auto"),
+    REDIS_URL=(str, ""),
 )
 environ.Env.read_env(BASE_DIR / ".env")
 
@@ -48,6 +49,7 @@ INSTALLED_APPS = [
     "rest_framework_simplejwt.token_blacklist",
     "corsheaders",
     "drf_spectacular",
+    "django_rq",
     # local
     "apps.schools",
     "apps.accounts",
@@ -57,6 +59,7 @@ INSTALLED_APPS = [
     "apps.results",
     "apps.attendance",
     "apps.dashboard",
+    "apps.jobs",
 ]
 
 MIDDLEWARE = [
@@ -153,6 +156,10 @@ SPECTACULAR_SETTINGS = {
     "SERVE_INCLUDE_SCHEMA": False,
     "COMPONENT_SPLIT_REQUEST": True,  # separate request/response shapes (write-only fields)
     "SCHEMA_PATH_PREFIX": r"/api/v1",
+    "ENUM_NAME_OVERRIDES": {
+        "JobStatusEnum": "apps.jobs.models.Job.Status",
+        "AttendanceStatusEnum": "apps.attendance.models.AttendanceRecord.Status",
+    },
 }
 
 # email: e.g. smtp+tls://user:password@smtp.example.com:587 (console in development)
@@ -225,5 +232,21 @@ if FILE_STORAGE == "s3":
 elif FILE_STORAGE != "local":
     raise ImproperlyConfigured("FILE_STORAGE must be 'local' or 's3'.")
 FILES_SERVED_BY_REDIRECT = FILE_STORAGE == "s3"
+
+# Redis: background jobs (django-rq) and the cache behind rate limits, shared by every worker
+# process. Without it, jobs run inside the request and each process counts rate limits alone.
+REDIS_URL = env("REDIS_URL")
+JOBS_ASYNC = bool(REDIS_URL)
+if REDIS_URL:
+    CACHES = {
+        "default": {
+            "BACKEND": "config.cache.ForgivingRedisCache",  # an outage pauses rate limits
+            "LOCATION": REDIS_URL,
+            "KEY_PREFIX": "yap",
+            # a hung Redis must not hang requests
+            "OPTIONS": {"socket_connect_timeout": 2, "socket_timeout": 2},
+        }
+    }
+RQ_QUEUES = {"default": {"URL": REDIS_URL or "redis://localhost:6379/0", "DEFAULT_TIMEOUT": 600}}
 
 DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"

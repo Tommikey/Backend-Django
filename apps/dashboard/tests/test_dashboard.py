@@ -116,7 +116,7 @@ def test_parent_dashboard_after_publishing(auth, busy, admin_user, make_user, sp
     Score.objects.create(
         student=busy.student, subject=busy.subject, term=busy.term, component=comp, value=15
     )
-    assert auth(admin_user).post("/api/v1/results/publish/", {}).status_code == 201
+    assert auth(admin_user).post("/api/v1/results/publish/", {}).status_code == 202
 
     [child] = get(auth, parent, spec)["parent"]["children"]
     assert child["student"]["id"] == busy.student.pk

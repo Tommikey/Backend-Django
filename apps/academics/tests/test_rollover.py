@@ -150,7 +150,7 @@ def test_final_level_can_repeat_and_latest_average_shows(auth, admin_user, year,
         student=year.dayo, subject=english, term=term, component=component, value=18
     )
     client = auth(admin_user)
-    assert client.post("/api/v1/results/publish/", {}).status_code == 201
+    assert client.post("/api/v1/results/publish/", {}).status_code == 202
     r = run(client, year, decisions=[{"student": year.dayo.pk, "action": "repeat"}])
     dayo = rows(r)["dayo"]
     assert dayo["to_classroom"]["name"] == "SS3A" and dayo["latest_average"] == "18.00"

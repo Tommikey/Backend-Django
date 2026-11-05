@@ -52,7 +52,7 @@ def school_kit(school, term, make_user):
 def count(client, method, url, data=None):
     with CaptureQueriesContext(connection) as queries:
         r = getattr(client, method)(url, data or {})
-    assert r.status_code in (200, 201), r.content[:300]
+    assert r.status_code in (200, 201, 202), r.content[:300]
     return len(queries)
 
 

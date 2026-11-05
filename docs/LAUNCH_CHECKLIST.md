@@ -19,8 +19,11 @@ off in the PR that handles them, and add new ones as they come up.
 
 ### Infrastructure
 
-- [ ] **Rate limits with several workers**: limits are counted per process until `CACHES` points at
-      Redis (planned with background jobs, F6). With `WEB_CONCURRENCY` > 1 they are approximate.
+- [ ] **Redis and a worker**: set `REDIS_URL` and run `rqworker default --with-scheduler`
+      (both are in `docker-compose.prod.yml`). Without Redis, publishing runs inside the request
+      (a very large school can hit the 30 s gunicorn timeout) and rate limits are per process.
+      Redis keeps queued jobs on disk (`--appendonly yes`); with a managed Redis, turn on
+      persistence too. Alert on a growing queue or failed jobs (`/admin/rq/`).
 - [ ] **Where uploaded files live**: downloads are access-checked either way. `FILE_STORAGE=local`
       keeps them in the `media` volume (one server only, and the volume must be backed up);
       `FILE_STORAGE=s3` uses a private bucket (`S3_*` settings), needed once there is more than
@@ -65,6 +68,8 @@ off in the PR that handles them, and add new ones as they come up.
       children); `GET dashboard/` gives each role's home screen.
 - [ ] **Send JSON**: with form posts, DRF treats a missing boolean as `false`. `is_active` is
       protected, but other booleans in a full `PUT` are not.
+- [ ] **Publishing is a job**: `POST results/publish/` returns `202` and a job; poll
+      `jobs/{id}/` (every second or two) and show progress until `done` or `failed`.
 - [ ] Generate a typed client from `/api/schema/` rather than hand-writing request shapes.
 - [ ] Lists: `?search=`, `?ordering=`, `?page_size=` (at most 200).
 

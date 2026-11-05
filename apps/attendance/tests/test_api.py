@@ -232,7 +232,7 @@ def test_report_card_attendance_draft_and_published(auth, form_kit, admin_user):
     assert card["published"] is False
     assert card["attendance"]["days_open"] == 2 and card["attendance"]["present"] == 1
 
-    assert auth(admin_user).post(PUBLISH_URL, {}).status_code == 201
+    assert auth(admin_user).post(PUBLISH_URL, {}).status_code == 202
     card = auth(kit.student).get(CARD_URL).json()
     assert card["published"] is True
     assert card["attendance"] == {

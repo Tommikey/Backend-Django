@@ -153,8 +153,14 @@ def test_publish_snapshots_and_locks(auth, kit, admin_user):
     assert auth(kit.teacher).post(PUBLISH_URL, {}).status_code == 403
 
     r = auth(admin_user).post(PUBLISH_URL, {})
-    assert r.status_code == 201, r.content
-    assert r.json()["report_cards"] == 1
+    assert r.status_code == 202, r.content
+    job = r.json()
+    assert (job["kind"], job["status"], job["params"]) == (
+        "publish_results",
+        "done",
+        {"term": kit.term.pk},
+    )
+    assert job["result"]["report_cards"] == 1
     assert auth(admin_user).post(PUBLISH_URL, {}).status_code == 409  # already published
 
     # scores and comments are locked
@@ -291,7 +297,7 @@ def test_published_card_outlives_the_enrollment(auth, kit, admin_user, make_user
     enter(auth, kit, CA1=15, CA2=15, Exam=50)
     parent = make_user("parent")
     Guardianship.objects.create(parent=parent, student=kit.student)
-    assert auth(admin_user).post(PUBLISH_URL, {}).status_code == 201
+    assert auth(admin_user).post(PUBLISH_URL, {}).status_code == 202
     kit.student.enrollments.all().delete()
 
     for reader in (kit.student, parent, admin_user):
