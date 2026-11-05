@@ -21,10 +21,12 @@ off in the PR that handles them, and add new ones as they come up.
 
 - [ ] **Rate limits with several workers**: limits are counted per process until `CACHES` points at
       Redis (planned with background jobs, F6). With `WEB_CONCURRENCY` > 1 they are approximate.
-- [ ] **Uploaded files**: lesson materials and submissions are not served when `DEBUG` is off, and
-      nothing checks who downloads them. Build private file storage (F5) before schools upload files.
-      Don't serve `media/` publicly as a stopgap: it would expose student work to anyone with a URL.
-- [ ] **Database backups**: automated daily backups, and one restore actually tested.
+- [ ] **Where uploaded files live**: downloads are access-checked either way. `FILE_STORAGE=local`
+      keeps them in the `media` volume (one server only, and the volume must be backed up);
+      `FILE_STORAGE=s3` uses a private bucket (`S3_*` settings), needed once there is more than
+      one app server. Keep the bucket private: never enable public access on it.
+- [ ] **Backups**: automated daily backups of the database and of uploaded files (the `media`
+      volume or the bucket), and one restore actually tested.
 - [ ] **Error monitoring**: decide on one (e.g. Sentry) so 500s reach someone.
 - [ ] **HSTS preload**: decide. The deploy check for it is silenced, since preload is a one-way
       commitment for the whole domain.

@@ -6,6 +6,7 @@ from datetime import timedelta
 from pathlib import Path
 
 import environ
+from django.core.exceptions import ImproperlyConfigured
 
 BASE_DIR = Path(__file__).resolve().parent.parent
 
@@ -23,6 +24,10 @@ env = environ.Env(
     EMAIL_URL=(str, "consolemail://"),
     DEFAULT_FROM_EMAIL=(str, "YAP <no-reply@localhost>"),
     PASSWORD_RESET_URL=(str, "http://localhost:3000/reset-password"),
+    FILE_STORAGE=(str, "local"),
+    S3_ENDPOINT_URL=(str, ""),
+    S3_REGION=(str, ""),
+    S3_ADDRESSING_STYLE=(str, "auto"),
 )
 environ.Env.read_env(BASE_DIR / ".env")
 
@@ -194,7 +199,29 @@ STORAGES = {
     "default": {"BACKEND": "django.core.files.storage.FileSystemStorage"},
     "staticfiles": {"BACKEND": "whitenoise.storage.CompressedStaticFilesStorage"},
 }
-MEDIA_URL = "media/"
+MEDIA_URL = "media/"  # never served publicly: downloads go through access-checked endpoints
 MEDIA_ROOT = BASE_DIR / "media"
+
+# uploaded files: "local" (MEDIA_ROOT, streamed by the API) or "s3" (a private bucket on AWS S3,
+# Cloudflare R2, MinIO...; downloads redirect to links that expire in minutes)
+FILE_STORAGE = env("FILE_STORAGE")
+if FILE_STORAGE == "s3":
+    STORAGES["default"] = {
+        "BACKEND": "storages.backends.s3.S3Storage",
+        "OPTIONS": {
+            "bucket_name": env("S3_BUCKET"),
+            "access_key": env("S3_ACCESS_KEY_ID"),
+            "secret_key": env("S3_SECRET_ACCESS_KEY"),
+            "endpoint_url": env("S3_ENDPOINT_URL") or None,  # blank: AWS itself
+            "region_name": env("S3_REGION") or None,
+            "addressing_style": env("S3_ADDRESSING_STYLE"),  # "path" for MinIO
+            "default_acl": "private",
+            "querystring_auth": True,
+            "file_overwrite": False,
+        },
+    }
+elif FILE_STORAGE != "local":
+    raise ImproperlyConfigured("FILE_STORAGE must be 'local' or 's3'.")
+FILES_SERVED_BY_REDIRECT = FILE_STORAGE == "s3"
 
 DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
