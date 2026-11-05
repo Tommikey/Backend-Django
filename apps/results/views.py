@@ -8,6 +8,9 @@ from apps.accounts.access import InUse
 from apps.accounts.models import User
 from apps.accounts.permissions import IsAdmin
 from apps.accounts.refs import student_ref
+from apps.jobs import queue as jobs
+from apps.jobs.models import Job
+from apps.jobs.serializers import JobSerializer
 
 from . import openapi, report_cards
 from .access import (
@@ -34,7 +37,6 @@ from .services import (
     enrollment_for,
     is_published,
     lock_term,
-    publish_term,
     unpublish_term,
 )
 
@@ -165,26 +167,30 @@ class CommentsView(APIView):
 
 
 class PublishView(APIView):
-    """POST {term?}: compute and store every report card for the term, lock its scores."""
+    """POST {term?}: compute and store every report card for the term, lock its scores.
+
+    Publishing a whole school takes a while, so it runs as a background job: the answer is
+    202 with the job; poll its ``url`` until ``status`` is ``done`` (``result`` then has
+    ``term``, ``published_at`` and ``report_cards``) or ``failed`` (see ``error``).
+    """
 
     permission_classes = [IsAdmin]
 
-    @extend_schema(request=TermOnlySerializer, responses={201: openapi.PublishResultSerializer})
+    @extend_schema(request=TermOnlySerializer, responses={202: JobSerializer})
     @transaction.atomic
     def post(self, request):
         term = validated(TermOnlySerializer, request, request.data)["term"]
-        lock_term(term)
+        lock_term(term)  # two admins publishing at once: the second waits, then sees the job
         if is_published(term):
             raise InUse("This term is already published.")
-        publication = publish_term(term, request.user)
-        return Response(
-            {
-                "term": term.pk,
-                "published_at": publication.published_at,
-                "report_cards": TermResult.objects.filter(term=term).count(),
-            },
-            status=201,
+        publishing = Job.objects.active().filter(
+            kind=Job.Kind.PUBLISH_RESULTS, params__term=term.pk
         )
+        if publishing.exists():
+            raise InUse("This term is already being published.")
+        job = jobs.start(Job.Kind.PUBLISH_RESULTS, request.user.school, request.user, term=term.pk)
+        data = JobSerializer(job, context={"request": request}).data
+        return Response(data, status=202, headers={"Location": str(data["url"])})
 
 
 class UnpublishView(APIView):

@@ -73,8 +73,10 @@ def test_handbuilt_responses_match_the_docs(spec, auth, filled):
     check(spec, response_schema(spec, "results/comments/", "put", 200), r.json(), "comments")
 
     r = admin.post("/api/v1/results/publish/", {})
-    assert r.status_code == 201
-    check(spec, response_schema(spec, "results/publish/", "post", 201), r.json(), "publish")
+    assert r.status_code == 202 and r.json()["status"] == "done"
+    check(spec, response_schema(spec, "results/publish/", "post", 202), r.json(), "publish")
+    job = admin.get(r["Location"])
+    check(spec, response_schema(spec, "jobs/{id}/", "get", 200), job.json(), "job")
     r = auth(kit.parent).get("/api/v1/results/report-card/", {"student": kit.student.pk})
     check(spec, response_schema(spec, "results/report-card/", "get", 200), r.json(), "card")
     r = auth(kit.admin).post("/api/v1/results/unpublish/", {})  # auth() shares one client

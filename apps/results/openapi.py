@@ -40,12 +40,6 @@ class CommentsResultSerializer(serializers.Serializer):
     principal_comment = serializers.CharField()
 
 
-class PublishResultSerializer(serializers.Serializer):
-    term = serializers.IntegerField()
-    published_at = serializers.DateTimeField()
-    report_cards = serializers.IntegerField()
-
-
 class UnpublishResultSerializer(serializers.Serializer):
     term = serializers.IntegerField()
     published = serializers.BooleanField()

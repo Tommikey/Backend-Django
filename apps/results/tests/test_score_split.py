@@ -91,7 +91,7 @@ def test_scores_use_their_own_sessions_split(kit, auth, admin_user):
 
     # publishing next year's term prints next year's split on the card
     make_term_current(next_term)
-    assert auth(admin_user).post("/api/v1/results/publish/", {}).status_code == 201
+    assert auth(admin_user).post("/api/v1/results/publish/", {}).status_code == 202
     card = auth(kit.student).get("/api/v1/results/report-card/").json()
     assert [s["component"] for s in card["subjects"][0]["scores"]] == ["CA", "Exam"]
 

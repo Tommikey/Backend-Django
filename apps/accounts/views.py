@@ -14,6 +14,7 @@ from rest_framework_simplejwt.tokens import RefreshToken
 from rest_framework_simplejwt.views import TokenBlacklistView, TokenObtainPairView
 
 from apps.academics.rules import current_session
+from apps.jobs.queue import run_later
 
 from . import bulk_import, openapi, password_reset
 from .access import InUse, RolePermissionsMixin, SchoolScopedMixin
@@ -122,7 +123,7 @@ class PasswordResetRequestView(APIView):
     def post(self, request):
         serializer = PasswordResetRequestSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
-        password_reset.send_reset_emails(serializer.validated_data["login"])
+        run_later(password_reset.send_reset_emails, serializer.validated_data["login"])
         return Response(
             {
                 "detail": "If an account matches and has an email address, a reset link "

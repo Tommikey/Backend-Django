@@ -48,7 +48,8 @@ Teachers enter marks per component on a score sheet. Until the term is published
 form teacher can preview live draft report cards. Publishing snapshots every report card — totals,
 grades, class averages, positions or GPA, and the grade scale in force — and locks scores and
 comments, so a published card never changes if the school edits its settings later. An admin can
-unpublish a term to make corrections.
+unpublish a term to make corrections. Publishing runs as a background job (see
+[Background jobs](#background-jobs)).
 
 ### Attendance in brief
 
@@ -120,6 +121,23 @@ device's session. `POST auth/password/` with `current_password` and `new_passwor
 own password and returns fresh tokens. Any password change, including an admin reset, signs the
 person out everywhere else.
 
+### Background jobs
+
+Slow work runs outside the request. `POST results/publish/` answers `202` with a job and a
+`Location` header; poll `GET jobs/{id}/` until `status` is `done` (the outcome is in `result`)
+or `failed` (a message for the user is in `error`). `GET jobs/` lists them (`?kind=`,
+`?status=`): admins see the school's, everyone else their own. Password-reset emails are queued
+too, and retried if the mail server is down.
+
+With `REDIS_URL` set, jobs wait in Redis until a worker runs them:
+
+```bash
+python manage.py rqworker default --with-scheduler
+```
+
+Without it (the default for development and tests) the same jobs run straight away inside the
+request, so the answer is already `done`. Platform staff can watch the queue at `/admin/rq/`.
+
 ### Score splits
 
 Each session has its own split of a subject's score (`schools/components/`, `?session=` to pick
@@ -180,6 +198,7 @@ All routes are under `/api/v1/`:
 | Live classes | `live-classes/` |
 | Results | `results/score-sheet/`, `results/comments/`, `results/class-results/`, `results/report-card/`, `results/publish/`, `results/unpublish/` |
 | Attendance | `attendance/register/`, `attendance/summary/`, `attendance/student/` |
+| Jobs | `jobs/` |
 
 ## Project layout
 
@@ -194,6 +213,7 @@ apps/
   results/         scores, comments, results maths, publishing, report cards
   attendance/      daily class register, term attendance counts
   dashboard/       what each role sees first
+  jobs/            background jobs (django-rq) and their status
 conftest.py        shared pytest fixtures
 ```
 
@@ -225,6 +245,7 @@ Configuration comes from `.env` (see `.env.example`). Never commit `.env`.
 | `FILE_STORAGE` | `local` | `local` (files in `MEDIA_ROOT`) or `s3` (a private bucket) |
 | `S3_BUCKET`, `S3_ACCESS_KEY_ID`, `S3_SECRET_ACCESS_KEY` | | With `FILE_STORAGE=s3` |
 | `S3_ENDPOINT_URL`, `S3_REGION`, `S3_ADDRESSING_STYLE` | AWS defaults | For R2 or MinIO set the endpoint; MinIO usually needs `path` |
+| `REDIS_URL` | empty | e.g. `redis://localhost:6379/0`: background jobs go to a worker, and rate limits are shared by every process. Empty: jobs run in the request |
 | `PASSWORD_RESET_URL` | `http://localhost:3000/reset-password` | The frontend page that finishes a reset; `?uid=&token=` are appended |
 
 ### Deploying with Docker
@@ -237,9 +258,10 @@ cp .env.prod.example .env.prod        # fill in secrets, hosts and origins
 docker compose -f docker-compose.prod.yml up -d --build
 ```
 
-This runs Postgres, applies migrations once, then starts the API under gunicorn on port 8000
-(`WEB_CONCURRENCY` workers) as a non-root user. Uploaded files live in the `media` volume.
-`GET /healthz/` answers 200 when the app can reach its database (503 otherwise); it needs no
+This runs Postgres and Redis, applies migrations once, then starts the API under gunicorn on port
+8000 (`WEB_CONCURRENCY` workers) as a non-root user, and a background worker. Uploaded files live
+in the `media` volume. `GET /healthz/` answers 200 when the app can reach its database (503
+otherwise), with `"status": "degraded"` if Redis is unreachable; it needs no
 login and isn't redirected to HTTPS, so load balancers can probe it. Their probes must still use
 a host listed in `ALLOWED_HOSTS`.
 
@@ -247,8 +269,13 @@ a host listed in `ALLOWED_HOSTS`.
 
 - Run behind a proxy that terminates TLS and sets `X-Forwarded-Proto`. Run
   `python manage.py collectstatic` at build time; WhiteNoise serves the admin's assets.
-- Rate limits are counted in Django's cache. The default in-memory cache is per process, so with
-  several gunicorn workers, point `CACHES` at Redis to make the limits exact.
+- Rate limits are counted in Django's cache, which is Redis when `REDIS_URL` is set. Without
+  it the cache is per process, so with several gunicorn workers the limits are approximate.
+- Keep at least one worker running whenever `REDIS_URL` is set, or publishing never finishes and
+  reset emails never leave. A job left queued or running for 15 minutes stops blocking a retry.
+- If Redis goes down the API stays up: rate limits pause, and publishing fails at once with
+  "try again in a few minutes". `/healthz/` reports `degraded` rather than failing, since every
+  app server shares the one Redis; alert on it.
 - Uploaded files (lesson materials, submissions) are private. They are stored under random
   names and downloaded only through `academics/lessons/{id}/file/` and `submissions/{id}/file/`,
   which apply the same visibility rules as the lesson or submission; a response's `file` field is

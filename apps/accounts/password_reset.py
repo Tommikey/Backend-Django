@@ -5,8 +5,6 @@ Asking never reveals whether an account exists. A link is a Django password-rese
 expires (PASSWORD_RESET_TIMEOUT) and stops working once the password changes.
 """
 
-import logging
-
 from django.conf import settings
 from django.contrib.auth.tokens import default_token_generator
 from django.core.mail import send_mail
@@ -14,10 +12,10 @@ from django.db.models import Q
 from django.utils.encoding import force_bytes, force_str
 from django.utils.http import urlsafe_base64_decode, urlsafe_base64_encode
 
+from apps.jobs.queue import EMAIL_RETRY, run_later
+
 from .authentication import can_sign_in
 from .models import User
-
-logger = logging.getLogger(__name__)
 
 MAX_ACCOUNTS_PER_REQUEST = 5  # a parent's address may also be on their children's accounts
 
@@ -52,18 +50,25 @@ def reset_link(user):
 
 
 def send_reset_emails(login):
+    """Queue a reset email for each account matching ``login``. Runs as a background job
+    itself, so the request takes as long whether or not an account exists."""
     for user in accounts_for(login):
-        body = MESSAGE.format(
-            name=user.first_name or user.username,
-            username=user.username,
-            school=user.school.name if user.school else "YAP",
-            hours=settings.PASSWORD_RESET_TIMEOUT // 3600,
-            link=reset_link(user),
-        )
-        try:
-            send_mail("Reset your YAP password", body, None, [user.email])
-        except Exception:  # never reveal delivery problems to the asker; log for staff
-            logger.exception("password reset email to user %s failed", user.pk)
+        run_later(send_reset_email, user.pk, retry=EMAIL_RETRY)
+
+
+def send_reset_email(user_id):
+    user = User.objects.select_related("school").get(pk=user_id)
+    if not can_sign_in(user) or not user.email:
+        return
+    body = MESSAGE.format(
+        name=user.first_name or user.username,
+        username=user.username,
+        school=user.school.name if user.school else "YAP",
+        hours=settings.PASSWORD_RESET_TIMEOUT // 3600,
+        link=reset_link(user),
+    )
+    # failures raise: the worker retries, then keeps the job in its failed list for staff
+    send_mail("Reset your YAP password", body, None, [user.email])
 
 
 def user_for_token(uid, token):
