@@ -220,3 +220,5 @@ def test_worker_health_check(monkeypatch):
         call_command("workerhealth")
     Worker([Queue("default", connection=connection)], connection=connection).register_birth()
     call_command("workerhealth")
+    with pytest.raises(CommandError, match="no live cron scheduler"):
+        call_command("workerhealth", "--cron")

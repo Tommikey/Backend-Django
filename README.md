@@ -138,6 +138,34 @@ python manage.py rqworker default --with-scheduler
 Without it (the default for development and tests) the same jobs run straight away inside the
 request, so the answer is already `done`. Platform staff can watch the queue at `/admin/rq/`.
 
+Timed work (live class reminders every minute, nightly cleanup) is queued by one scheduler
+process, configured in `config/cron.py`:
+
+```bash
+python manage.py rqcron config.cron
+```
+
+### Notifications
+
+People are told, in the app and by email when they have an address:
+
+| Event | Who |
+|---|---|
+| A term's results are published | Each student with a report card, and their parents |
+| A student is marked absent (today's or yesterday's register) | Their parents |
+| A quiz or assignment is set | The class's students |
+| A live class starts within 15 minutes | The class's students |
+
+`GET notifications/` lists yours, newest first (`?unread=true`, `?kind=`); each has `data` with
+the ids to open what it is about. `POST notifications/{id}/read/`, `POST notifications/read-all/`,
+`GET notifications/unread-count/` (also `unread_notifications` in `auth/me/`).
+`GET/PATCH notifications/settings/` turns the emails off. Emails go out from the worker in
+batches; read notifications are deleted after 90 days, any after a year.
+
+Times in notifications, and "today" for registers and dashboards, are in the school's time zone
+(`timezone` in `schools/me/`, set from the system's preset: Africa/Lagos, Europe/London,
+America/New_York).
+
 ### Score splits
 
 Each session has its own split of a subject's score (`schools/components/`, `?session=` to pick
@@ -199,6 +227,7 @@ All routes are under `/api/v1/`:
 | Results | `results/score-sheet/`, `results/comments/`, `results/class-results/`, `results/report-card/`, `results/publish/`, `results/unpublish/` |
 | Attendance | `attendance/register/`, `attendance/summary/`, `attendance/student/` |
 | Jobs | `jobs/` |
+| Notifications | `notifications/`, `notifications/settings/` |
 
 ## Project layout
 
@@ -214,6 +243,7 @@ apps/
   attendance/      daily class register, term attendance counts
   dashboard/       what each role sees first
   jobs/            background jobs (django-rq) and their status
+  notifications/   in-app and email notifications, live class reminders
 conftest.py        shared pytest fixtures
 ```
 
@@ -259,7 +289,7 @@ docker compose -f docker-compose.prod.yml up -d --build
 ```
 
 This runs Postgres and Redis, applies migrations once, then starts the API under gunicorn on port
-8000 (`WEB_CONCURRENCY` workers) as a non-root user, and a background worker. Uploaded files live
+8000 (`WEB_CONCURRENCY` workers) as a non-root user, a background worker and the scheduler. Uploaded files live
 in the `media` volume. `GET /healthz/` answers 200 when the app can reach its database (503
 otherwise), with `"status": "degraded"` if Redis is unreachable; it needs no
 login and isn't redirected to HTTPS, so load balancers can probe it. Their probes must still use

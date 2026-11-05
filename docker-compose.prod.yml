@@ -1,5 +1,5 @@
-# Production-style stack: Postgres, Redis, a one-off migration, the API under gunicorn and a
-# background worker.
+# Production-style stack: Postgres, Redis, a one-off migration, the API under gunicorn, a
+# background worker and the scheduler that queues timed work.
 #   cp .env.prod.example .env.prod   # then fill it in
 #   docker compose -f docker-compose.prod.yml up -d --build
 # Put a TLS-terminating proxy (Caddy, nginx, a cloud load balancer) in front of port 8000.
@@ -63,6 +63,24 @@ services:
       retries: 3
     volumes:
       - media:/app/media
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+      redis:
+        condition: service_healthy
+    restart: unless-stopped
+
+  # queues scheduled work (live class reminders, nightly cleanup) for the workers; run one only
+  cron:
+    build: .
+    env_file: .env.prod
+    command: ["python", "manage.py", "rqcron", "config.cron"]
+    healthcheck:
+      test: ["CMD", "python", "manage.py", "workerhealth", "--cron"]
+      interval: 30s
+      timeout: 10s
+      start_period: 20s
+      retries: 3
     depends_on:
       migrate:
         condition: service_completed_successfully

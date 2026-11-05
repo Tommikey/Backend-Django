@@ -18,6 +18,8 @@ class User(AbstractUser):
     )
     # the school's own number for a student, e.g. DSS/2025/014; unique in the school (any case)
     admission_number = models.CharField(max_length=30, blank=True, default="")
+    # notifications are always in the app; this turns their emails off
+    email_notifications = models.BooleanField(default=True)
 
     class Meta(AbstractUser.Meta):
         constraints = [

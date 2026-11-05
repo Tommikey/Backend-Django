@@ -22,6 +22,8 @@ class LiveClass(models.Model):
     starts_at = models.DateTimeField()
     ends_at = models.DateTimeField(null=True, blank=True)
     join_url = models.URLField()
+    # when students were reminded it is about to start; cleared if it moves
+    reminded_at = models.DateTimeField(null=True, blank=True, editable=False)
     created_at = models.DateTimeField(auto_now_add=True)
 
     def __str__(self):
